@@ -471,8 +471,8 @@ class PlayheadOverlay(QWidget):
 
     def _paint_grid(self, painter, clip):
         # Vertical lines at the ruler's numbered timecodes (and fainter ones
-        # at the seconds between, when they are far enough apart), and a line
-        # under every track lane. Unified window only; drawn over the clips
+        # at the seconds between, when they are far enough apart). Unified
+        # window only; drawn over the clips
         # in a low-alpha line so the picture under it stays readable.
         import workspace
         if workspace.get() is None:
@@ -492,10 +492,9 @@ class PlayheadOverlay(QWidget):
             base = QColor(255, 255, 255) if theme.is_dark() else QColor(0, 0, 0)
         except Exception:
             base = QColor(255, 255, 255)
-        major, minor, lane = QColor(base), QColor(base), QColor(base)
+        major, minor = QColor(base), QColor(base)
         major.setAlpha(46)
         minor.setAlpha(20)
-        lane.setAlpha(70)
         painter.save()
         painter.setClipRect(area)
         start = tl.view_start_frame
@@ -518,10 +517,6 @@ class PlayheadOverlay(QWidget):
             elif show_minor:
                 painter.fillRect(x, 0, 1, h, minor)
             sec += sec_step
-        for r in range(table.rowCount()):
-            y = table.rowViewportPosition(r) + table.rowHeight(r) - 1
-            if 0 <= y < h:
-                painter.fillRect(left, y, width, 1, lane)
         painter.restore()
 
     def paintEvent(self, event):
