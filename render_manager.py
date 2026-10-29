@@ -454,6 +454,22 @@ def mix_mono_pcm(project_db, sequence_id, fps, total_frames):
     return mix_full_pcm(project_db, rows, fps, total_frames, vols, order), True
 
 
+# ---------------------------------------------------------------- output size
+
+def output_sizes(seq_w, seq_h):
+    # [(label, (w, h))] the render can output: the sequence size first,
+    # then the standard heights above it at the sequence's aspect ratio
+    # (even sizes). The picture is composited at that size, not scaled up.
+    seq_w, seq_h = int(seq_w), int(seq_h)
+    out = [("Sequence size (%dx%d)" % (seq_w, seq_h), (seq_w, seq_h))]
+    for h, name in ((1080, "1080p"), (1440, "1440p"), (2160, "4K UHD")):
+        if h <= seq_h:
+            continue
+        w = int(round(seq_w * h / float(seq_h) / 2.0)) * 2
+        out.append(("%s (%dx%d)" % (name, w, h), (w, h)))
+    return out
+
+
 # ---------------------------------------------------------------- GPU frames
 
 class _RenderGpu(object):
@@ -839,6 +855,20 @@ def _make_window_class():
                 self.codec_combo.addItem(name)
             self.codec_combo.setCurrentIndex(0)
             form.addRow("Codec", self.codec_combo)
+            # Output size (CPU backend: composited at that size)
+            self.size_combo = QComboBox()
+            from cpu_compositor import use_cpu_backend
+            if use_cpu_backend():
+                try:
+                    sw, sh = timeline._sequence_size()
+                    for label, wh in output_sizes(sw, sh):
+                        self.size_combo.addItem(label, wh)
+                except Exception:
+                    pass
+                self.size_combo.setToolTip(
+                    "The frame is composited at this size: footage keeps its "
+                    "detail, but a larger size renders more slowly.")
+                form.addRow("Output Size", self.size_combo)
             self.gop_spin = QSpinBox()
             self.gop_spin.setRange(1, 10000)
             self.gop_spin.setValue(DEFAULT_GOP)
@@ -992,7 +1022,8 @@ def _make_window_class():
                     # No NVIDIA stack (macOS): numpy compositor
                     from cpu_compositor import new_cpu_composer
                     comp = new_cpu_composer(self.timeline._project_db(),
-                                            self.sequence_id)
+                                            self.sequence_id,
+                                            self.size_combo.currentData())
                 else:
                     from sequence_preview_gpu import new_composer
                     comp = new_composer(self.timeline._project_db(),
@@ -1033,7 +1064,8 @@ def _make_window_class():
                 params = {
                     "project_db": project_db, "sequence_id": self.sequence_id,
                     "out_path": resolve_output_path(self.out_edit.text(), project_db),
-                    "width": player.seq_w, "height": player.seq_h, "fps": tl.fps,
+                    "width": getattr(player, "out_w", player.seq_w),
+                    "height": getattr(player, "out_h", player.seq_h), "fps": tl.fps,
                     "total_frames": total, "gop": self.gop_spin.value(),
                     "codec": self.codec_combo.currentText(),
                     "target_mbps": self.target_spin.value(),

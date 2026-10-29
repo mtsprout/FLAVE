@@ -62,9 +62,13 @@ def _num(v, default, lo, hi):
 def blend_layer(dst, src, scale=None, pos_dx=None, pos_dy=None,
                 orig_size=None, opacity=None, crop_x=None, crop_y=None,
                 gamma=None, brightness=None, contrast=None, rotate=None,
-                outline=None, crop_edges=None, chroma=None):
+                outline=None, crop_edges=None, chroma=None,
+                k_pos=1.0, k_scale=1.0):
     # dst: uint8 (H, W, 3), blended in place. src: uint8 (h, w, 3 or 4).
-    # Arguments are those of SequencePlayer._blend.
+    # Arguments are those of SequencePlayer._blend. k_pos / k_scale: dst is
+    # k times the sequence size (render Output Size): positions grow by
+    # k_pos, a source in its own pixels is scaled by k_scale (1 for a source
+    # already made at the output size, such as a text image).
     H, W = dst.shape[:2]
     sh, sw = src.shape[:2]
     factor = 1.0
@@ -73,6 +77,7 @@ def blend_layer(dst, src, scale=None, pos_dx=None, pos_dy=None,
             factor = float(scale) / 100.0
         except (TypeError, ValueError):
             factor = 1.0
+    factor *= k_scale
     if factor <= 0.0:
         return
     fx_, fy_ = factor, factor
@@ -117,11 +122,11 @@ def blend_layer(dst, src, scale=None, pos_dx=None, pos_dy=None,
         rad = math.radians(rot)
         rc, rs = math.cos(rad), math.sin(rad)
     try:
-        pdx = int(round(float(pos_dx))) if pos_dx is not None else 0
+        pdx = int(round(float(pos_dx) * k_pos)) if pos_dx is not None else 0
     except (TypeError, ValueError):
         pdx = 0
     try:
-        pdy = int(round(float(pos_dy))) if pos_dy is not None else 0
+        pdy = int(round(float(pos_dy) * k_pos)) if pos_dy is not None else 0
     except (TypeError, ValueError):
         pdy = 0
     keys = []
@@ -227,10 +232,15 @@ class CpuComposer(object):
     cpu_backend = True
     headless = True
 
-    def __init__(self, project, sequence_id, seq_w, seq_h):
+    def __init__(self, project, sequence_id, seq_w, seq_h, out_size=None):
+        # seq_w / seq_h: the sequence (what _layer_items measures in);
+        # out_size (w, h): the composited frame, a render's Output Size
         self.project = project
         self.sequence_id = int(sequence_id)
         self.seq_w, self.seq_h = int(seq_w), int(seq_h)
+        self.out_w, self.out_h = ((int(out_size[0]), int(out_size[1]))
+                                  if out_size else (self.seq_w, self.seq_h))
+        self.k = self.out_w / float(self.seq_w)
         self.row = self.seq_w * 3
         self.ready = True
         self.closed = False
@@ -271,14 +281,37 @@ class CpuComposer(object):
         raw = np.frombuffer(bytes(img.constBits())[:bpl * h], np.uint8)
         return raw.reshape(h, bpl)[:, :w * 4].reshape(h, w, 4).copy()
 
+    def _text_image_scaled(self, clip_id, style):
+        # The text clip drawn for the output size: font size, position and
+        # shadow blur / offset grow with the frame (not a stretched image)
+        from PySide6.QtGui import QImage
+        from text_clip import render_text_image
+        k = self.k
+        style = tuple(style)
+        text, family, size, color, x, y = style[:6]
+        shadow = list(style[6:11]) if len(style) >= 11 else None
+        if shadow:
+            shadow[2] = int(round((shadow[2] or 0) * k))
+            shadow[4] = int(round((shadow[4] or 0) * k))
+        img = render_text_image(
+            text, family, max(1, int(round((size or 1) * k))), color,
+            None if x is None else int(round(x * k)),
+            None if y is None else int(round(y * k)),
+            self.out_w, self.out_h, clip_key=clip_id,
+            shadow=tuple(shadow) if shadow else None)
+        return img.convertToFormat(QImage.Format_RGBA8888)
+
     def _text(self, path, clip_id, style):
         if path in self.images:
             return self.images[path]
         arr = None
         if style is not None:
             from player_text import text_rgba
-            arr = self._qimage_array(
-                text_rgba(clip_id, style, self.seq_w, self.seq_h))
+            if self.k == 1.0:
+                img = text_rgba(clip_id, style, self.seq_w, self.seq_h)
+            else:
+                img = self._text_image_scaled(clip_id, style)
+            arr = self._qimage_array(img)
         # One text image per clip: drop older styles of this clip
         mine = "text:%d:" % int(clip_id)
         for k in [k for k in self.images if k.startswith(mine)]:
@@ -322,7 +355,7 @@ class CpuComposer(object):
 
     # ---- frames
     def _frame(self, frame, snapshot):
-        canvas = np.zeros((self.seq_h, self.seq_w, 3), np.uint8)
+        canvas = np.zeros((self.out_h, self.out_w, 3), np.uint8)
         styles = snapshot[29] if len(snapshot) > 29 else {}
         for layer in self._layer_items(frame, snapshot):
             kind, path, src_frame = layer[0], layer[1], layer[2]
@@ -331,6 +364,8 @@ class CpuComposer(object):
                 src = self._image(path)
             elif kind == "text":
                 src = self._text(path, layer[6][0], styles.get(layer[6][0]))
+                # made at the output size already: positions only grow
+                k_scale = 1.0
             elif os.path.isfile(path):
                 src = self._video(dkey, path, src_frame)
             else:
@@ -338,7 +373,10 @@ class CpuComposer(object):
             if src is None:
                 continue
             g = lambda i: layer[i] if len(layer) > i else None
-            blend_layer(canvas, src, scale=g(3), pos_dx=g(4), pos_dy=g(5),
+            if kind != "text":
+                k_scale = self.k
+            blend_layer(canvas, src, k_pos=self.k, k_scale=k_scale,
+                        scale=g(3), pos_dx=g(4), pos_dy=g(5),
                         orig_size=g(7), opacity=g(8), crop_x=g(9),
                         crop_y=g(10), gamma=g(11), brightness=g(12),
                         contrast=g(13), rotate=g(14), outline=g(15),
@@ -405,11 +443,11 @@ def _borrow():
 _borrow_done = [False]
 
 
-def new_cpu_composer(project, sequence_id):
+def new_cpu_composer(project, sequence_id, out_size=None):
     _borrow_once()
     from sequence_preview_gpu import _sequence_size
     w, h = _sequence_size(project, sequence_id)
-    return CpuComposer(project, sequence_id, w, h)
+    return CpuComposer(project, sequence_id, w, h, out_size)
 
 
 # ---- the preview worker's one composer (sequence_preview_gpu.headless_for)

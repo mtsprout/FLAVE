@@ -314,6 +314,9 @@ def refresh(self):
         # labels, trims, icons and the player snapshot (clip_speed.py)
         from clip_speed import load_clip_speeds
         self._clip_speeds = load_clip_speeds(cur, self.sequence_id)
+        # Fit scale (clip_fit.py) by clip id, for the player snapshot
+        from clip_fit import load_clip_fits
+        self._clip_fits = load_clip_fits(conn, self.sequence_id)
         # Frame rate conform by footage id, for the clip icons
         # (sequence_timeline_video.icon_source_frame)
         from sequence_player import load_fps_conform
@@ -523,6 +526,27 @@ def _toggle_track_flag(self, track_id, column):
     self._after_track_change()
 
 
+def _fit_new_clip(self, cur, clip_id, footage_id):
+    # Footage larger than the sequence is dropped scaled to fit (clip_fit.py)
+    # instead of 1:1 and cropped. CPU backend only; the CUDA path keeps the
+    # old drop. Never blocks the drop.
+    try:
+        from cpu_compositor import use_cpu_backend
+        if not use_cpu_backend():
+            return
+        from clip_fit import fit_percent_for, store_fit
+        cur.execute("SELECT width, height FROM footage WHERE id = ?", (footage_id,))
+        f = cur.fetchone()
+        if not f:
+            return
+        seq_w, seq_h = self._sequence_size()
+        pct = fit_percent_for(seq_w, seq_h, f[0], f[1])
+        if pct:
+            store_fit(cur, clip_id, pct)
+    except Exception as e:
+        print("Fit scale not stored: %s" % e)
+
+
 def drop_footage(self, footage_id, row, x_in_clips):
     # Insert a clip: image footage on image tracks (one second), video on
     # video (full length, fitted to the room), audio on audio
@@ -592,12 +616,14 @@ def drop_footage(self, footage_id, row, x_in_clips):
             "VALUES (?, ?, ?, ?, 0)",
             (track_id, footage_id, start_frame, length_frames)
         )
+        new_clip_id = cur.lastrowid
         if track_type in ("video", "image"):
             # New video / image clip takes the footage Proxy Default
             cur.execute(
                 "UPDATE clips SET proxy_percent = (SELECT COALESCE(proxy_percent, 0) "
                 "FROM footage WHERE id = ?) WHERE id = ?",
-                (footage_id, cur.lastrowid))
+                (footage_id, new_clip_id))
+            _fit_new_clip(self, cur, new_clip_id, footage_id)
         if audio_track_id is not None:
             # link_id is the video clip id, shared by both clips
             link_id = cur.lastrowid
@@ -885,6 +911,8 @@ def slice_members_db(self, cur, members, split_frame, linked):
         move_markers(cur, c[0], right_ids[-1], right_in,
                      right_in + source_span(right_length, speed))
         copy_speed(cur, "clips", c[0], right_ids[-1])
+        from clip_fit import copy_fit
+        copy_fit(cur, c[0], right_ids[-1])
         # Right piece keeps the clip gain and proxy percent
         cur.execute(
             "UPDATE clips SET gain_db = (SELECT gain_db FROM clips WHERE id = ?) "

@@ -678,7 +678,8 @@ def timeline_snapshot(tl, use_proxies=True, render_deint=False):
             outline_clips) + tuple(outline_rgba_clips) + (
                 fps_conform, move_x_clips, move_y_clips,
                 crop_xy_x_clips, crop_xy_y_clips) + tuple(crop_edge_clips) + (
-                clip_speeds, text_styles) + tuple(chroma_clips)
+                clip_speeds, text_styles) + tuple(chroma_clips) + (
+                    dict(getattr(tl, "_clip_fits", None) or {}),)
 
 
 def _chroma_key_rows(chroma):
@@ -1238,6 +1239,8 @@ class SequencePlayer(QWindow):
         # every linked keyframe effect applies as to an image layer
         text_styles = snapshot[29] if len(snapshot) > 29 else {}
         from player_text import text_layer_path
+        # Fit scale by clip id (snapshot[34], clip_fit.py): the base scale
+        fits = snapshot[34] if len(snapshot) > 34 else {}
         from keyframe import color_value_for_link
         from keyframe import crop_offset_for_link
         from keyframe import opacity_for_link
@@ -1282,9 +1285,12 @@ class SequencePlayer(QWindow):
                                        speeds.get(clip[0], 100)),
                             fps_conform.get(clip[1]), ratio, pframes)
                     link_id = clip[8] if len(clip) > 8 else None
+                    fit = fits.get(clip[0])
                     scale = scale_percent_for_link(
                         scale_clips, link_id, frame, clip_order,
-                        base_scale=100.0)
+                        base_scale=fit or 100.0)
+                    if scale is None and fit:
+                        scale = fit
                     pos_dx = position_x_offset(
                         pos_x_clips, link_id, frame, clip_order, self.seq_w)
                     pos_dy = position_y_offset(

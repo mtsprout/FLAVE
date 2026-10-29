@@ -321,7 +321,10 @@ class NewProjectWindow(QMainWindow):
                 -- (footage_id is NULL then); NULL for footage clips
                 sequence_id_ref INTEGER,
                 -- Clip speed percent, 1.. 1000 (clip_speed.py)
-                speed_percent INTEGER NOT NULL DEFAULT 100
+                speed_percent INTEGER NOT NULL DEFAULT 100,
+                -- Fit scale percent of an oversized footage drop
+                -- (clip_fit.py); NULL = base scale 100
+                fit_percent REAL
             )
         """)
 
