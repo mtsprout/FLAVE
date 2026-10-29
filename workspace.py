@@ -308,9 +308,9 @@ class Workspace(object):
 
     def open_footage(self, win):
         self._set_panel(self.footage_dock, win)
-        # the proxy / codec / pixel-aspect columns start hidden (header
+        # the proxy / size / codec / pixel-aspect columns start hidden (header
         # right-click turns them on); double-click adds the clip
-        manage_columns(win.table, "footage_cols_hidden", "2,3,9,10")
+        manage_columns(win.table, "footage_cols_hidden", "2,3,7,8,9,10")
         win.table.cellDoubleClicked.connect(
             lambda row, col, w=win: self._footage_double_clicked(w, row))
 
@@ -387,6 +387,10 @@ class Workspace(object):
         win = st.SequenceTimeline(self.pm, sid)
         win._geometry_ready = False         # the layout remembers the sizes
         embed(win)
+        # compact track labels: a narrower Name column, the Type column off
+        # (the clips themselves show video / audio / image)
+        win.ruler.resizeSection(0, min(win.ruler.sectionSize(0), 120))
+        win.ruler.setSectionHidden(1, True)
         st._open_windows[sid] = win
         from sequence_timeline_sql import _load_sequence_name
         name = _load_sequence_name(sid) or "Sequence %d" % sid

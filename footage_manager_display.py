@@ -31,6 +31,15 @@ def _icon_limits():
         h = int(_get_global_setting("FootageManager_IconMaxHeightPx", "64") or "64")
     except ValueError:
         h = 64
+    try:
+        import workspace
+        if workspace.get() is not None:
+            # compact rows in the unified window, unless the size was
+            # changed from the factory 64 x 64 in Global Settings
+            if w == 64 and h == 64:
+                w, h = 72, 40
+    except Exception:
+        pass
     return max(16, w), max(16, h)
 
 

@@ -100,13 +100,15 @@ def stylesheet(c):
         alternate-background-color: %(panel)s; color: %(text)s; border: none;
         gridline-color: transparent; outline: 0;
         selection-background-color: %(select)s; selection-color: %(text)s; }
-    QTableWidget::item, QTableView::item { padding: 2px 6px; border: none;
+    QTableWidget, QTableView { font-size: 12px; }
+    QTableWidget::item, QTableView::item { padding: 1px 5px; border: none;
         border-bottom: 1px solid %(border)s; }
     QTableWidget::item:hover { background: %(hover)s; }
     QTableWidget::item:selected { background: %(select)s; color: %(text)s; }
     QHeaderView { background: %(window)s; border: none; }
     QHeaderView::section { background: %(window)s; color: %(dim)s; border: none;
-        border-bottom: 1px solid %(border)s; padding: 5px 8px; font-weight: 600; }
+        border-bottom: 1px solid %(border)s; padding: 3px 6px; font-weight: 600;
+        font-size: 11px; }
     QTableCornerButton::section { background: %(window)s; border: none; }
     QAbstractScrollArea { background: %(panel)s; }
     QScrollBar:vertical { background: transparent; width: 11px; margin: 0; }

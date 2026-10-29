@@ -354,10 +354,14 @@ class FootageManager(QMainWindow):
         info = self._media_info()
         max_h = 64
         try:
-            max_h = int(_get_global_setting("FootageManager_IconMaxHeightPx", "64") or "64")
-        except ValueError:
-            pass
-        self.table.verticalHeader().setDefaultSectionSize(max(max_h + 8, 24))
+            from footage_manager_display import _icon_limits
+            max_h = _icon_limits()[1]
+        except Exception:
+            try:
+                max_h = int(_get_global_setting("FootageManager_IconMaxHeightPx", "64") or "64")
+            except ValueError:
+                pass
+        self.table.verticalHeader().setDefaultSectionSize(max(max_h + 6, 24))
         for i, row in enumerate(rows):
             items = row["items"]
             icon_widget = row.get("icon_widget")
@@ -373,6 +377,31 @@ class FootageManager(QMainWindow):
         self.table.resizeColumnsToContents()
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.status_bar.showMessage(f"{len(rows)} footage item(s)")
+        self._set_name_tooltips()
+
+    def _set_name_tooltips(self):
+        # The file behind a name, and its picture size / rate (those columns
+        # may be hidden)
+        try:
+            conn = sqlite3.connect(self.project_db)
+            try:
+                info = dict((r[0], r[1:]) for r in conn.execute(
+                    "SELECT id, original_path, width, height, fps FROM footage"))
+            finally:
+                conn.close()
+            for r in range(self.table.rowCount()):
+                it = self.table.item(r, 1)
+                fid = it.data(Qt.UserRole) if it is not None else None
+                if fid in info:
+                    path, w, h, fps = info[fid]
+                    tip = path or ""
+                    if w and h:
+                        tip += "\n%dx%d" % (w, h)
+                        if fps:
+                            tip += "  %.5g fps" % fps
+                    it.setToolTip(tip)
+        except Exception:
+            pass
 
     def _media_info(self):
         # {footage_id: (height, width, codec, fps, pixel_aspect)}; {} on a

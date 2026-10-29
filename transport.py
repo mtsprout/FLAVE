@@ -121,6 +121,9 @@ class TimecodeLabel(QWidget):
                           int(self._height))
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
+    def text(self):
+        return self._text
+
     def setText(self, text):
         if text != self._text:
             self._text = text
