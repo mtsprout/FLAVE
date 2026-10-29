@@ -637,9 +637,10 @@ def drop_footage(self, footage_id, row, x_in_clips):
             track_id = _new_track(self, cur, track_type)
         if track_type == "video":
             peak_seconds = self._peaks_seconds(cur, footage_id)
-            if (new_tracks and peak_seconds > 0
-                    and self._first_audio_track_id(cur) is None):
-                _new_track(self, cur, "audio")      # for the linked audio
+            if new_tracks and peak_seconds > 0:
+                # a video with sound brings its own audio track (right under
+                # the new video track), not a free one that already exists
+                _new_track(self, cur, "audio")
             linked = peak_seconds > 0 and self._first_audio_track_id(cur) is not None
             full = footage_length_frames(cur, footage_id, self.fps, peak_seconds)
             length_frames, audio_track_id, refused = fit_video_drop(
