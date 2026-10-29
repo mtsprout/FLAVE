@@ -427,6 +427,12 @@ def install_window_snapshots(app=None):
     app = app or QApplication.instance()
     if app is None or _filter is not None:
         return _filter
+    if sys.platform == "darwin" and not os.environ.get("FLAVE_SNAPSHOT_BUTTON"):
+        # The helper is placed with Windows title-bar geometry (caption
+        # buttons on the right); on macOS (buttons on the left) the floating
+        # helpers do not stay on their windows. Cmd+Shift+4, then Space, is
+        # the system window screenshot. FLAVE_SNAPSHOT_BUTTON=1 turns it on.
+        return None
     _filter = _SnapshotFilter(app)
     app.installEventFilter(_filter)
     return _filter
