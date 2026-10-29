@@ -12,9 +12,9 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 
 from PySide6.QtCore import QPoint, QRect, QRectF, Qt, QTimer
-from PySide6.QtGui import (QBackingStore, QColor, QImage, QPainter, QRegion,
-                           QSurfaceFormat, QWindow)
-from PySide6.QtWidgets import QWidget
+from PySide6.QtGui import (QBackingStore, QColor, QImage, QPainter, QPalette,
+                           QRegion, QSurfaceFormat, QWindow)
+from PySide6.QtWidgets import QApplication, QWidget
 
 from sequence_player import SequencePlayer, playback_rect
 from sequence_player_gpu import _dark_mode
@@ -26,6 +26,14 @@ except ImportError:
     _PilImage = None
 
 PLAY_DECODE_THREADS = 3
+
+
+def _theme_is_dark():
+    # FLAVE's own dark mode (a black stylesheet), or a dark system palette
+    # (macOS dark appearance)
+    if _dark_mode():
+        return True
+    return QApplication.palette().color(QPalette.Window).lightness() < 128
 
 
 def _decode_jpeg(jpeg):
@@ -130,7 +138,10 @@ class SequencePlayerCpu(SequencePlayer):
         # The picture letterboxed into size (logical px) on painter p, and
         # the captions over it. Used by the window and by the docked panel.
         rect = QRect(QPoint(0, 0), size)
-        p.fillRect(rect, QColor(0, 0, 0) if dark else QColor(255, 255, 255))
+        # The look of the surround follows the application's real theme
+        # (macOS dark appearance), not only FLAVE's own dark_mode setting
+        dark = _theme_is_dark()
+        p.fillRect(rect, QColor(28, 28, 28) if dark else QColor(214, 214, 214))
         if not has_frame or self._img is None:
             return
         ww, wh = float(size.width()), float(size.height())
@@ -145,6 +156,11 @@ class SequencePlayerCpu(SequencePlayer):
         target = QRectF((ww - pw) / 2.0, (wh - ph) / 2.0, pw, ph)
         p.setRenderHint(QPainter.SmoothPixmapTransform, True)
         p.drawImage(target, self._img)
+        # A thin outline just outside the picture sets a dark frame apart
+        # from the surround
+        p.setPen(QColor(110, 110, 110) if dark else QColor(150, 150, 150))
+        p.setBrush(Qt.NoBrush)
+        p.drawRect(target.adjusted(-1.0, -1.0, 0.0, 0.0))
         try:
             self._paint_captions_cpu(p, target)
         except Exception as e:
@@ -377,7 +393,9 @@ class PlayerPanel(QWidget):
         try:
             lg = self.logic
             if lg is None or lg.closed:
-                p.fillRect(self.rect(), QColor(30, 30, 30))
+                dark = _theme_is_dark()
+                p.fillRect(self.rect(), QColor(28, 28, 28) if dark
+                           else QColor(214, 214, 214))
                 p.setPen(QColor(150, 150, 150))
                 p.drawText(self.rect(), Qt.AlignCenter, "No sequence open")
             else:
