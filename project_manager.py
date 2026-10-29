@@ -160,6 +160,7 @@ class ProjectManager(QMainWindow):
 
         # File menu
         file_menu = menubar.addMenu("File")
+        self.file_menu = file_menu
 
         new_action = QAction("New Project", self)
         new_action.triggered.connect(self._new_project)
@@ -181,6 +182,7 @@ class ProjectManager(QMainWindow):
         exit_action = QAction("Exit", self)
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
+        self.exit_action = exit_action
 
         # Snapshot undo/redo (undo.py), no menu (: the Edit menu
         # is gone). Ctrl+Z / Ctrl+Y are application-wide shortcuts on these

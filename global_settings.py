@@ -107,6 +107,12 @@ def apply_dark_mode(enabled):
     app = QApplication.instance()
     if app is None:
         return
+    import workspace
+    if workspace.enabled():
+        # the unified window has its own look (theme.py)
+        import theme
+        theme.apply(bool(enabled))
+        return
     if enabled:
         style = """
             QMainWindow, QWidget, QDialog {

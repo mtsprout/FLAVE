@@ -32,6 +32,12 @@ PICTURE_MARGIN = 8       # logical px between the player edge and the picture
 def _theme_is_dark():
     # FLAVE's own dark mode (a black stylesheet), or a dark system palette
     # (macOS dark appearance)
+    try:
+        import theme
+        if theme._state["hooked"]:
+            return theme.is_dark()          # the unified window's theme
+    except Exception:
+        pass
     if _dark_mode():
         return True
     return QApplication.palette().color(QPalette.Window).lightness() < 128
