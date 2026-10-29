@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QLabel, QMenuBar, QMenu,
     QFileDialog, QMessageBox, QStatusBar, QInputDialog, QLineEdit
 )
-from PySide6.QtCore import Qt, QSettings
+from PySide6.QtCore import QEvent, Qt, QSettings
 from PySide6.QtGui import QAction, QKeySequence
 
 # Stub import for the separate settings window
@@ -487,6 +487,19 @@ class ProjectManager(QMainWindow):
                     self.setGeometry(parts[0], parts[1], parts[2], parts[3])
             except Exception:
                 pass
+
+    # Height of the macOS menu bar that slides over a fullscreen window
+    FULLSCREEN_TOP_STRIP = 28
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if (event.type() == QEvent.WindowStateChange
+                and getattr(self, "workspace", None) is not None):
+            # Fullscreen hides the menu bar and it slides down over the top
+            # of the window: leave that strip free so the panel titles stay
+            # reachable. Normal windows start at the top edge as before.
+            top = self.FULLSCREEN_TOP_STRIP if self.isFullScreen() else 0
+            self.setContentsMargins(0, top, 0, 0)
 
     def moveEvent(self, event):
         super().moveEvent(event)
