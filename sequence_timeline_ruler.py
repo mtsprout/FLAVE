@@ -469,9 +469,67 @@ class PlayheadOverlay(QWidget):
             if x is not None:
                 self.update(x - pad, 0, 2 * pad + 1, self.height())
 
+    def _paint_grid(self, painter, clip):
+        # Vertical lines at the ruler's numbered timecodes (and fainter ones
+        # at the seconds between, when they are far enough apart), and a line
+        # under every track lane. Unified window only; drawn over the clips
+        # in a low-alpha line so the picture under it stays readable.
+        import workspace
+        if workspace.get() is None:
+            return
+        tl = self.timeline
+        table = tl.table
+        ppf, fps = float(tl.pixels_per_frame), float(tl.fps)
+        if ppf <= 0 or fps <= 0:
+            return
+        left = table.columnViewportPosition(CLIPS_COL)
+        width = table.columnWidth(CLIPS_COL)
+        area = QRect(left, 0, width, self.height()).intersected(clip)
+        if area.isEmpty():
+            return
+        try:
+            import theme
+            base = QColor(255, 255, 255) if theme.is_dark() else QColor(0, 0, 0)
+        except Exception:
+            base = QColor(255, 255, 255)
+        major, minor, lane = QColor(base), QColor(base), QColor(base)
+        major.setAlpha(46)
+        minor.setAlpha(20)
+        lane.setAlpha(70)
+        painter.save()
+        painter.setClipRect(area)
+        start = tl.view_start_frame
+        total = tl.total_frames()
+        first = max(0, start)
+        last = min(total - 1, start + int(width / ppf) + 1)
+        interval = ruler_label_interval(ppf * fps)
+        sec_step = 1 if ppf * fps >= 1 else max(1, interval)
+        show_minor = ppf * fps * sec_step >= 16
+        sec = int(math.ceil(first / fps / sec_step)) * sec_step
+        h = self.height()
+        while True:
+            f = int(math.ceil(sec * fps - 1e-9))
+            if f > last:
+                break
+            x = int(left + (f - start) * ppf)
+            numbered = interval > 0 and sec % interval == 0
+            if numbered:
+                painter.fillRect(x, 0, 1, h, major)
+            elif show_minor:
+                painter.fillRect(x, 0, 1, h, minor)
+            sec += sec_step
+        for r in range(table.rowCount()):
+            y = table.rowViewportPosition(r) + table.rowHeight(r) - 1
+            if 0 <= y < h:
+                painter.fillRect(left, y, width, 1, lane)
+        painter.restore()
+
     def paintEvent(self, event):
         tl = self.timeline
         sx = self._frame_x(tl.current_frame)
+        _gp = QPainter(self)
+        self._paint_grid(_gp, event.rect())
+        _gp.end()
         if event.rect().contains(self.rect()):
             self._painted_xs = set()
         if sx is not None and event.rect().intersects(QRect(sx, 0, 1, self.height())):
