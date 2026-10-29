@@ -49,7 +49,8 @@ _DB_READY = [None]      # path checked (schema + defaults) in this process
 
 def _global_db_path():
     # globalsettings.db in the folder that holds the code files
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)),
+    import app_paths
+    return os.path.join(app_paths.data_dir(),
                         "globalsettings.db")
 
 

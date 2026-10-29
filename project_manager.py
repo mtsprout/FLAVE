@@ -10,8 +10,9 @@ import os
 # cache in a "models" folder next to these .py files, wherever FLAVE runs
 # from (no drive letter is hard-coded). Set before anything imports
 # huggingface_hub. The Windows symlink warning is turned off.
-os.environ["HF_HOME"] = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "models")
+import app_paths
+app_paths.ensure_tool_path()        # ffmpeg / ffprobe also when started from Finder
+os.environ["HF_HOME"] = os.path.join(app_paths.data_dir(), "models")
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QLabel, QMenuBar, QMenu,
@@ -240,8 +241,7 @@ class ProjectManager(QMainWindow):
         from version import APP_NAME, VERSION
         build = ""
         try:
-            with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                   "counter.txt")) as f:
+            with open(app_paths.resource("counter.txt")) as f:
                 build = "Build %d" % int(f.read().strip())
         except (OSError, ValueError):
             pass
@@ -618,7 +618,7 @@ class ProjectManager(QMainWindow):
 def print_build():
     # Build number from counter.txt next to this script, printed at launch
     # so the console shows which build is running
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "counter.txt")
+    path = app_paths.resource("counter.txt")
     try:
         with open(path, "r") as f:
             from version import APP_NAME, VERSION
@@ -639,6 +639,8 @@ def warn_missing_numpy():
 
 
 def main():
+    from version import APP_NAME as _name
+    app_paths.set_mac_app_name(_name)       # before the application exists
     print_build()
     warn_missing_numpy()
     # Shared CUDA primary context before any window or preview worker
@@ -654,8 +656,7 @@ def main():
     app.setApplicationDisplayName(APP_NAME)
     app.setApplicationVersion(VERSION)
     # The FLAVE icon in the Dock and on every window (instead of Python's)
-    icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                             "assets", "FLAVE.png")
+    icon_path = app_paths.resource("assets", "FLAVE.png")
     if os.path.isfile(icon_path):
         from PySide6.QtGui import QIcon
         app.setWindowIcon(QIcon(icon_path))
