@@ -6,6 +6,11 @@
 # Everything GPU in SequencePlayer is overridden here; the rest is
 # inherited. ASCII only.
 
+import io
+import sqlite3
+import threading
+from concurrent.futures import ThreadPoolExecutor
+
 from PySide6.QtCore import QPoint, QRect, QRectF
 from PySide6.QtGui import (QBackingStore, QColor, QImage, QPainter, QRegion,
                            QSurfaceFormat, QWindow)
@@ -14,7 +19,30 @@ from sequence_player import SequencePlayer, playback_rect
 from sequence_player_gpu import _dark_mode
 
 
+try:
+    from PIL import Image as _PilImage
+except ImportError:
+    _PilImage = None
+
+PLAY_DECODE_THREADS = 3
+
+
 def _decode_jpeg(jpeg):
+    # Pillow when installed: it releases the GIL while it decodes, so the
+    # window thread keeps running (Qt's JPEG decoder holds it). Else Qt.
+    if _PilImage is not None:
+        try:
+            im = _PilImage.open(io.BytesIO(jpeg))
+            im.load()
+            if im.mode != "RGB":
+                im = im.convert("RGB")
+            raw = im.tobytes()
+            img = QImage(raw, im.width, im.height, im.width * 3,
+                         QImage.Format_RGB888)
+            img._raw = raw          # the QImage reads these bytes in place
+            return img
+        except Exception:
+            pass
     img = QImage()
     if not img.loadFromData(jpeg, "JPG") or img.isNull():
         raise RuntimeError("preview JPEG decode failed")
@@ -31,6 +59,10 @@ class SequencePlayerCpu(SequencePlayer):
         self.setFormat(QSurfaceFormat())
         self._store = None
         self._img = None            # QImage of the shown frame (any size)
+        self._pq_lock = threading.Lock()   # _play_queue / _play_pending
+        self._play_pending = set()  # frames a background job is decoding
+        self._play_gen = 0          # bumped when the queue is dropped
+        self._play_pool = None
 
     # ---- setup / release (no device memory)
     def _setup(self):
@@ -42,11 +74,17 @@ class SequencePlayerCpu(SequencePlayer):
 
     def _release_gpu_locked(self):
         self.ready = False
-        self._play_queue = []
+        self._release_play_bufs()
+        pool, self._play_pool = self._play_pool, None
+        if pool is not None:
+            pool.shutdown(wait=False, cancel_futures=True)
         self._img = None
 
     def _release_play_bufs(self):
-        self._play_queue = []
+        with self._pq_lock:
+            self._play_gen += 1
+            self._play_queue = []
+            self._play_pending = set()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -126,17 +164,96 @@ class SequencePlayerCpu(SequencePlayer):
                 print(f"Play decode failed: {e}")
         return out
 
+    # Fill-ahead runs on background threads: the timeline's play tick (GUI
+    # thread) only starts a job and picks up frames that are already decoded.
+    def play_fill(self, start, n):
+        start, n = int(start), int(n)
+        with self._pq_lock:
+            have = set(f for f, _img in self._play_queue) | self._play_pending
+            want = [f for f in range(start, start + n) if f not in have]
+            if not want:
+                return 0
+            self._play_pending.update(want)
+            gen = self._play_gen
+        if self._play_pool is None:
+            self._play_pool = ThreadPoolExecutor(
+                max_workers=PLAY_DECODE_THREADS, thread_name_prefix="PlayDec")
+        self._play_pool.submit(self._fill_job, want, gen)
+        return len(want)
+
+    def _fill_job(self, want, gen):
+        # Background thread: read the JPEGs of these frames, decode, queue
+        from sequence_preview import preview_db_path, CLEAN_SQL
+        from sequence_preview import PREVIEW_GUI_BUSY_SEC
+        path = preview_db_path(self.timeline._project_db(), self.sequence_id)
+        rows = {}
+        try:
+            conn = sqlite3.connect(path, timeout=PREVIEW_GUI_BUSY_SEC)
+            try:
+                conn.execute("PRAGMA query_only = ON")
+                for f, blob in conn.execute(
+                        "SELECT frame, jpeg FROM preview WHERE frame BETWEEN ? "
+                        "AND ? AND jpeg IS NOT NULL AND " + CLEAN_SQL,
+                        (min(want), max(want))):
+                    rows[int(f)] = bytes(blob)
+            finally:
+                conn.close()
+        except Exception as e:
+            print(f"Play fill read failed: {e}")
+        for f in want:
+            img = None
+            jpeg = rows.get(f)
+            if jpeg and self._play_gen == gen:
+                try:
+                    img = _decode_jpeg(jpeg)
+                except Exception as e:
+                    print(f"Play decode failed: {e}")
+            with self._pq_lock:
+                if self._play_gen != gen:
+                    return
+                self._play_pending.discard(f)
+                if img is not None:
+                    self._play_queue.append((f, img))
+
+    def play_has(self, frame):
+        frame = int(frame)
+        with self._pq_lock:
+            return any(f == frame for f, _img in self._play_queue)
+
+    def play_queue_hi(self):
+        # Highest frame decoded or being decoded (so the tick does not
+        # ask for the same frames again), None when nothing is queued
+        with self._pq_lock:
+            frames = [f for f, _img in self._play_queue]
+            frames.extend(self._play_pending)
+        return max(frames) if frames else None
+
+    def play_show_at_most(self, frame):
+        frame = int(frame)
+        with self._pq_lock:
+            best = max((f for f, _img in self._play_queue if f <= frame),
+                       default=None)
+        if best is not None and self.play_show(best):
+            return best
+        return None
+
     def play_show(self, frame):
-        for i, (f, img) in enumerate(self._play_queue):
-            if f == frame:
-                break
-        else:
-            return False
-        _f, img = self._play_queue.pop(i)
+        with self._pq_lock:
+            for i, (f, img) in enumerate(self._play_queue):
+                if f == frame:
+                    del self._play_queue[i]
+                    break
+            else:
+                return False
         self._img = img
         self._present(_dark_mode(), True)
         self.shown_frame = frame
         return True
 
     def play_drop_before(self, frame):
-        self._play_queue = [(f, b) for f, b in self._play_queue if f >= frame]
+        with self._pq_lock:
+            self._play_queue = [(f, b) for f, b in self._play_queue
+                                if f >= frame]
+
+    def close_play_conn(self):
+        self._release_play_bufs()

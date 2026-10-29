@@ -30,7 +30,8 @@ On macOS, or with `FLAVE_BACKEND=cpu`, FLAVE skips CUDA, NVDEC, nvJPEG
 and OpenGL entirely: `cpu_compositor.py` (numpy blend, ffmpeg decode,
 Qt JPEG), `sequence_player_cpu.py` (QImage-painted Sequence Player)
 and the CPU branches in `render_manager.py` and
-`footage_manager_display.py`. Setup: `pip install PySide6 numpy`,
+`footage_manager_display.py`. Setup: `pip install PySide6 numpy pillow` (pillow is optional but makes
+playback smoother),
 ffmpeg and ffprobe on PATH, `python project_manager.py`. Exports use
 libx264 / libx265. Not ported yet: the border outline effect, proxy
 generation (NVENC only), screen capture (`flave_capture.py`).

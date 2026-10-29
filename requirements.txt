@@ -7,6 +7,10 @@ PySide6>=6.5
 numpy>=1.24
 PyNvVideoCodec>=1.0
 
+# Optional, macOS / CPU backend: smoother playback (decodes preview JPEGs
+# without holding the GIL). Falls back to Qt when missing.
+# pillow>=10
+
 # Optional: Generate Captions (audio clip right-click)
 # faster-whisper>=1.0
 # If captions should run on CUDA, ctranslate2 may also need (CUDA 12):
