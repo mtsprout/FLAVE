@@ -139,6 +139,14 @@ class ProjectManager(QMainWindow):
             apply_dark_mode(dark == "1")
 
         self._create_menus()
+        # One main window (workspace.py) where there is no separate-windows
+        # UI: footage and sequences left, player centre, timeline bottom
+        import workspace
+        self.workspace = workspace.install(self) if workspace.enabled() else None
+        if self.workspace is not None:
+            self.setWindowTitle("FLAVE")
+            self.resize(1500, 950)
+            self._add_workspace_menu_items()
         self._restore_geometry()
         self._autoload_project()
         self._restore_open_windows()
@@ -220,6 +228,21 @@ class ProjectManager(QMainWindow):
         self.footage_mgr_action.setEnabled(False)
         self.footage_mgr_action.triggered.connect(self._open_footage_manager)
         self.windows_menu.addAction(self.footage_mgr_action)
+
+    def _add_workspace_menu_items(self):
+        ws = self.workspace
+        self.windows_menu.addSeparator()
+        self.windows_menu.addAction(ws.timeline_dock.toggleViewAction())
+        self.windows_menu.addAction(ws.render_dock.toggleViewAction())
+        reset = QAction("Reset Layout", self)
+        reset.triggered.connect(ws.reset_layout)
+        self.windows_menu.addAction(reset)
+
+    def _open_workspace_panels(self):
+        # A project is open: Footage and Sequences fill the left docks
+        if self.workspace is not None and self.current_project:
+            self._open_footage_manager()
+            self._open_sequence_manager()
 
     def _undo_redo(self, which):
         if not self.current_project:
@@ -320,6 +343,7 @@ class ProjectManager(QMainWindow):
         _ensure_audiotmp_for(db_path)
         _ensure_undo_db_for(db_path)
         self._update_windows_menu()
+        self._open_workspace_panels()
 
     def _open_project(self):
         start_dir = _get_global_setting("last_project_folder", "")
@@ -327,6 +351,8 @@ class ProjectManager(QMainWindow):
             self, "Open Project", start_dir, "Project Database (*.db)"
         )
         if path:
+            if self.workspace is not None and self.current_project:
+                self._close_project()       # the old project's panels go
             self.current_project = path
             self.status_label.setText(f"Project: {path}")
             self.status_bar.showMessage("Project opened")
@@ -338,6 +364,7 @@ class ProjectManager(QMainWindow):
             _ensure_undo_db_for(path)
             _prune_proxies_for(path)
             self._update_windows_menu()
+            self._open_workspace_panels()
 
     def _close_project(self):
         # Close every project window; only Project Manager (and Global
@@ -368,6 +395,8 @@ class ProjectManager(QMainWindow):
             sequence_timeline._open_windows.clear()
         except ImportError:
             pass
+        if self.workspace is not None:
+            self.workspace.project_closed()     # tabs and docks emptied
         # Proxy Manager windows belong to the project
         try:
             import proxy_manager
@@ -417,6 +446,14 @@ class ProjectManager(QMainWindow):
             return
         if not self.current_project:
             return
+        if self.workspace is not None:
+            win = getattr(self, "sequence_window", None)
+            if win is not None and self._alive(win):
+                self.workspace.show_dock(self.workspace.sequence_dock)
+                return
+            self.sequence_window = SequenceManager(self)
+            self.workspace.open_sequences(self.sequence_window)
+            return
         self.sequence_window = SequenceManager(self)
         place_from_project_manager(self.sequence_window, self, "SequenceManager",
                                    ("SequenceManager_w",))
@@ -427,6 +464,14 @@ class ProjectManager(QMainWindow):
             QMessageBox.warning(self, "Windows", "footage_manager.py not found")
             return
         if not self.current_project:
+            return
+        if self.workspace is not None:
+            win = getattr(self, "footage_window", None)
+            if win is not None and self._alive(win):
+                self.workspace.show_dock(self.workspace.footage_dock)
+                return
+            self.footage_window = FootageManager(self)
+            self.workspace.open_footage(self.footage_window)
             return
         self.footage_window = FootageManager(self)
         place_from_project_manager(self.footage_window, self, "footage_manager",
@@ -458,6 +503,15 @@ class ProjectManager(QMainWindow):
         value = f"{g.x()},{g.y()},{g.width()},{g.height()}"
         _set_global_setting("project_manager_geometry", value)
 
+    @staticmethod
+    def _alive(win):
+        # False once the Qt object behind a Python window is deleted
+        try:
+            win.objectName()
+            return True
+        except RuntimeError:
+            return False
+
     def _window_is_open(self, attr):
         w = getattr(self, attr, None)
         return w is not None and w.isVisible()
@@ -478,6 +532,10 @@ class ProjectManager(QMainWindow):
             "project_settings": self._open_project_settings,
             "global_settings": self._open_global_settings,
         }
+        if self.workspace is not None:
+            names = [n for n in names if n not in ("footage", "sequence")]
+            if self.current_project:
+                names = ["footage", "sequence"] + names
         for name in names:
             opener = openers.get(name)
             if opener is None:
@@ -504,6 +562,8 @@ class ProjectManager(QMainWindow):
                         print("Sequence Player restore failed: %s" % e)
 
     def closeEvent(self, event):
+        if self.workspace is not None:
+            self.workspace.save_layout()
         self._save_open_windows()
         # Snapshot open timelines before any child closeEvent can remove ids
         if set_app_quitting is not None:

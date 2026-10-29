@@ -11,9 +11,10 @@ import sqlite3
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
-from PySide6.QtCore import QPoint, QRect, QRectF
+from PySide6.QtCore import QPoint, QRect, QRectF, Qt, QTimer
 from PySide6.QtGui import (QBackingStore, QColor, QImage, QPainter, QRegion,
                            QSurfaceFormat, QWindow)
+from PySide6.QtWidgets import QWidget
 
 from sequence_player import SequencePlayer, playback_rect
 from sequence_player_gpu import _dark_mode
@@ -119,28 +120,35 @@ class SequencePlayerCpu(SequencePlayer):
         store.beginPaint(QRegion(rect))
         p = QPainter(store.paintDevice())
         try:
-            p.fillRect(rect, QColor(0, 0, 0) if dark else QColor(255, 255, 255))
-            if has_frame and self._img is not None:
-                ww, wh = float(size.width()), float(size.height())
-                seq_aspect = self.seq_w / float(self.seq_h)
-                win_aspect = ww / wh
-                if win_aspect > seq_aspect:
-                    vh, vw = 1.0, seq_aspect / win_aspect
-                else:
-                    vw, vh = 1.0, win_aspect / seq_aspect
-                vw, vh = playback_rect(vw, vh, self._playback_pct)
-                pw, ph = vw * ww, vh * wh
-                target = QRectF((ww - pw) / 2.0, (wh - ph) / 2.0, pw, ph)
-                p.setRenderHint(QPainter.SmoothPixmapTransform, True)
-                p.drawImage(target, self._img)
-                try:
-                    self._paint_captions_cpu(p, target)
-                except Exception as e:
-                    print(f"Sequence Player caption overlay failed: {e}")
+            self.paint_picture(p, size, dark, has_frame)
         finally:
             p.end()
         store.endPaint()
         store.flush(QRegion(rect))
+
+    def paint_picture(self, p, size, dark, has_frame):
+        # The picture letterboxed into size (logical px) on painter p, and
+        # the captions over it. Used by the window and by the docked panel.
+        rect = QRect(QPoint(0, 0), size)
+        p.fillRect(rect, QColor(0, 0, 0) if dark else QColor(255, 255, 255))
+        if not has_frame or self._img is None:
+            return
+        ww, wh = float(size.width()), float(size.height())
+        seq_aspect = self.seq_w / float(self.seq_h)
+        win_aspect = ww / wh
+        if win_aspect > seq_aspect:
+            vh, vw = 1.0, seq_aspect / win_aspect
+        else:
+            vw, vh = 1.0, win_aspect / seq_aspect
+        vw, vh = playback_rect(vw, vh, self._playback_pct)
+        pw, ph = vw * ww, vh * wh
+        target = QRectF((ww - pw) / 2.0, (wh - ph) / 2.0, pw, ph)
+        p.setRenderHint(QPainter.SmoothPixmapTransform, True)
+        p.drawImage(target, self._img)
+        try:
+            self._paint_captions_cpu(p, target)
+        except Exception as e:
+            print(f"Sequence Player caption overlay failed: {e}")
 
     def _paint_captions_cpu(self, p, target):
         from player_captions import captions_at, caption_image
@@ -257,3 +265,142 @@ class SequencePlayerCpu(SequencePlayer):
 
     def close_play_conn(self):
         self._release_play_bufs()
+
+
+# ---- docked player: the same logic, painted by a normal widget
+
+class SequencePlayerEmbedded(SequencePlayerCpu):
+    # Never shown as a window: a PlayerPanel (workspace.py) paints it and
+    # forwards the mouse. Everything that asks the window about itself
+    # (exposed, size, cursor, global position) answers for the panel.
+
+    panel = None
+
+    def __init__(self, timeline, panel):
+        super().__init__(timeline)
+        self.panel = panel
+        self._dark = True
+        self._has_frame = False
+        self._setup()                   # ready: no window expose to wait for
+
+    # window questions answered for the panel
+    def isExposed(self):
+        return self.panel is not None and self.panel.isVisible()
+
+    def isVisible(self):
+        return self.isExposed()
+
+    def visibility(self):
+        return QWindow.Windowed
+
+    def size(self):
+        return self.panel.size() if self.panel is not None else super().size()
+
+    def width(self):
+        return self.panel.width() if self.panel is not None else super().width()
+
+    def height(self):
+        return self.panel.height() if self.panel is not None else super().height()
+
+    def devicePixelRatio(self):
+        return (self.panel.devicePixelRatioF() if self.panel is not None
+                else super().devicePixelRatio())
+
+    def mapToGlobal(self, pos):
+        return self.panel.mapToGlobal(pos)
+
+    def setCursor(self, cursor):
+        self.panel.setCursor(cursor)
+
+    def unsetCursor(self):
+        self.panel.unsetCursor()
+
+    def raise_(self):
+        pass
+
+    def requestActivate(self):
+        pass
+
+    def show(self):
+        pass
+
+    def _save_geometry(self):
+        pass
+
+    def _setup(self):
+        self.ready = True
+
+    def _present(self, dark, has_frame):
+        self._dark, self._has_frame = dark, has_frame
+        if self.panel is not None:
+            self.panel.update()
+
+    def close(self):
+        if self.closed:
+            return True
+        self._on_close()
+        if self.panel is not None:
+            self.panel.set_logic(None)
+        return True
+
+
+class PlayerPanel(QWidget):
+    # The Sequence Player of one timeline inside the main window
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.logic = None
+        self.setMinimumSize(200, 120)
+        self.setMouseTracking(True)
+        self.setFocusPolicy(Qt.ClickFocus)
+
+    def set_logic(self, logic):
+        self.logic = logic
+        self.update()
+        if logic is not None:
+            QTimer.singleShot(0, self._first_frame)
+
+    def _first_frame(self):
+        lg = self.logic
+        if lg is not None and not lg.closed:
+            lg.request_frame(force=True)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        QTimer.singleShot(0, self._first_frame)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.update()
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        try:
+            lg = self.logic
+            if lg is None or lg.closed:
+                p.fillRect(self.rect(), QColor(30, 30, 30))
+                p.setPen(QColor(150, 150, 150))
+                p.drawText(self.rect(), Qt.AlignCenter, "No sequence open")
+            else:
+                lg.paint_picture(p, self.size(), lg._dark, lg._has_frame)
+        finally:
+            p.end()
+
+    # the player's own mouse handling (text clip move / edit, size menu)
+    def _forward(self, name, event):
+        lg = self.logic
+        if lg is None or lg.closed:
+            event.ignore()
+            return
+        getattr(lg, name)(event)
+
+    def mousePressEvent(self, event):
+        self._forward("mousePressEvent", event)
+
+    def mouseMoveEvent(self, event):
+        self._forward("mouseMoveEvent", event)
+
+    def mouseReleaseEvent(self, event):
+        self._forward("mouseReleaseEvent", event)
+
+    def mouseDoubleClickEvent(self, event):
+        self._forward("mouseDoubleClickEvent", event)

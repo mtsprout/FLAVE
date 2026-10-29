@@ -2485,6 +2485,10 @@ def open_player_for(timeline):
     # One player per timeline: raise it if open, else create and show.
     # show()/raise_()/requestActivate() on a fullscreen (or already visible)
     # QWindow bring the title bar back on Play -- leave those alone.
+    import workspace
+    ws = workspace.get()
+    if ws is not None:
+        return ws.open_player(timeline)         # the main window's player
     player = getattr(timeline, "_player", None)
     if player is not None and not player.closed:
         if (player.visibility() == QWindow.FullScreen

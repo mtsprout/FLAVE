@@ -1206,6 +1206,10 @@ _window_class = []
 
 def open_render_manager(timeline):
     # One window per sequence; raise it if already open
+    import workspace
+    ws = workspace.get()
+    if ws is not None:
+        return ws.open_render(timeline)         # a tab of the main window
     sid = int(timeline.sequence_id)
     win = _open_windows.get(sid)
     if win is None:

@@ -140,6 +140,9 @@ def _captions_busy(parent, sequence_id, title):
 
 def _retitle_windows(sequence_id, name):
     # Open timeline (and its player) titles follow a rename
+    import workspace
+    if workspace.get() is not None:
+        workspace.get().retitle(sequence_id, name)
     win = _open_windows.get(sequence_id) if _open_windows is not None else None
     if win is None:
         return

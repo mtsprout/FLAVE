@@ -121,8 +121,9 @@ def snapshot_open_timelines():
     # Write ids of every visible timeline to open_timelines. Source of truth on quit.
     ids = []
     for sequence_id, win in list(_open_windows.items()):
-        if win is not None and win.isVisible() and sequence_id not in ids:
-            ids.append(sequence_id)
+        if (win is not None and sequence_id not in ids
+                and (win.isVisible() or getattr(win, "_ws_embedded", False))):
+            ids.append(sequence_id)     # (a tab of another timeline is hidden)
     _write_open_ids(ids)
     # Players open on those timelines go to open_players
     player_ids = []
@@ -136,6 +137,10 @@ def snapshot_open_timelines():
 
 def open_timeline(parent, sequence_id):
     # Raise an existing visible window for this id, or open a new one.
+    import workspace
+    ws = workspace.get()
+    if ws is not None:
+        return ws.open_timeline(sequence_id)      # a tab of the main window
     win = _open_windows.get(sequence_id)
     if win is not None and win.isVisible():
         win.raise_()
