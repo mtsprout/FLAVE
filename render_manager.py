@@ -987,8 +987,16 @@ def _make_window_class():
             # from sequence_player import open_player_for
             self._set_busy(True, "Starting the GPU compositor...")
             try:
-                from sequence_preview_gpu import new_composer
-                comp = new_composer(self.timeline._project_db(), self.sequence_id)
+                from cpu_compositor import use_cpu_backend
+                if use_cpu_backend():
+                    # No NVIDIA stack (macOS): numpy compositor
+                    from cpu_compositor import new_cpu_composer
+                    comp = new_cpu_composer(self.timeline._project_db(),
+                                            self.sequence_id)
+                else:
+                    from sequence_preview_gpu import new_composer
+                    comp = new_composer(self.timeline._project_db(),
+                                        self.sequence_id)
             except Exception as e:
                 self._fail("Could not start the GPU compositor: %s" % e)
                 return
@@ -1035,7 +1043,8 @@ def _make_window_class():
                     "captions_on": self.caps_check.isChecked(),
                     "export_srt": export_srt,
                     "captions": caps, "languages": langs,
-                    "chunk": chunk, "cuda": True,
+                    "chunk": chunk,
+                    "cuda": not getattr(player, "cpu_backend", False),
                 }
             except Exception as e:
                 try:
@@ -1045,7 +1054,8 @@ def _make_window_class():
                     pass
                 self._fail("Could not prepare the render: %s" % e)
                 return
-            gpu = _RenderGpu(player)
+            gpu = (player if getattr(player, "cpu_backend", False)
+                   else _RenderGpu(player))
             token = self._pause     # Released by done (or _fail)
 
             def source(frames):
