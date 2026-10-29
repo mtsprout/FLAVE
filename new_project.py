@@ -272,6 +272,9 @@ class NewProjectWindow(QMainWindow):
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 original_path TEXT NOT NULL,
                 filename TEXT,
+                -- the footage item's own name (footage_names.py); NULL =
+                -- show the file name
+                display_name TEXT,
                 duration REAL,
                 width INTEGER,
                 height INTEGER,

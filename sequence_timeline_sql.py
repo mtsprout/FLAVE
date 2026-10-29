@@ -265,10 +265,13 @@ def refresh(self):
             "FROM tracks WHERE sequence_id = ? ORDER BY sort_order, id",
             (self.sequence_id,))
         rows = cur.fetchall()
+        from footage_names import ensure_column
+        ensure_column(conn)
         cur.execute(
             "SELECT c.id, c.track_id, c.footage_id, c.start_frame, c.length_frames, "
             "COALESCE(c.enabled, 1), COALESCE(c.solo, 0), c.in_frame, "
-            "COALESCE(f.filename, f.original_path, ''), c.link_id, t.track_type "
+            "COALESCE(NULLIF(f.display_name, ''), f.filename, f.original_path, ''), "
+            "c.link_id, t.track_type "
             "FROM clips c JOIN tracks t ON t.id = c.track_id "
             "LEFT JOIN footage f ON f.id = c.footage_id "
             "WHERE t.sequence_id = ? ORDER BY c.start_frame, c.id",

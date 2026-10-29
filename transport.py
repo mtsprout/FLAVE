@@ -96,6 +96,49 @@ class IconButton(QAbstractButton):
         p.end()
 
 
+class TimecodeLabel(QWidget):
+    # HH:MM:SS:FF drawn one character per fixed cell (digits all as wide as
+    # the widest digit, separators narrower), so the readout never shifts
+    # while it counts, whatever the font
+
+    def __init__(self, text="00:00:00:00", point_size=16, bold=True, dim=False,
+                 parent=None):
+        super().__init__(parent)
+        font = QFont(self.font())
+        font.setPointSizeF(float(point_size))
+        if bold:
+            font.setWeight(QFont.DemiBold)
+        self._font = font
+        self._dim = dim
+        self._text = text
+        from PySide6.QtGui import QFontMetricsF
+        fm = QFontMetricsF(font)
+        self._cell = max(fm.horizontalAdvance(c) for c in "0123456789") + 1.0
+        self._sep = fm.horizontalAdvance(":") + 1.0
+        self._height = fm.height() + 2
+        n_sep = len(text.replace(":", "")) , text.count(":")
+        self.setFixedSize(int(n_sep[0] * self._cell + n_sep[1] * self._sep + 4),
+                          int(self._height))
+        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+
+    def setText(self, text):
+        if text != self._text:
+            self._text = text
+            self.update()
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setFont(self._font)
+        pal = theme.DARK if theme.is_dark() else theme.LIGHT
+        p.setPen(QColor(pal["dim"] if self._dim else pal["text"]))
+        x = 2.0
+        for ch in self._text:
+            w = self._sep if ch == ":" else self._cell
+            p.drawText(QRectF(x, 0, w, self.height()), Qt.AlignCenter, ch)
+            x += w
+        p.end()
+
+
 class TransportBar(QWidget):
 
     def __init__(self, timeline, parent=None):
@@ -119,19 +162,10 @@ class TransportBar(QWidget):
         for b in (self.home, self.prev, self.play, self.next, self.end):
             lay.addWidget(b)
         lay.addSpacing(16)
-        self.time_label = QLabel("00:00:00:00")
-        font = QFont(self.font())
-        font.setPointSize(16)
-        font.setWeight(QFont.DemiBold)
-        try:
-            font.setFeature("tnum", 1)      # equal-width digits (Qt 6.7+)
-        except Exception:
-            pass
-        self.time_label.setFont(font)
-        self.total_label = QLabel("")
-        self.total_label.setStyleSheet("color: gray;")
+        self.time_label = TimecodeLabel("00:00:00:00", 16, True)
+        self.total_label = TimecodeLabel("00:00:00:00", 12, False, dim=True)
         lay.addWidget(self.time_label)
-        lay.addSpacing(8)
+        lay.addSpacing(10)
         lay.addWidget(self.total_label)
         lay.addStretch(1)
         self._shown = None
@@ -160,7 +194,7 @@ class TransportBar(QWidget):
         if state != self._shown:
             self._shown = state
             self.time_label.setText(timecode(frame, fps))
-            self.total_label.setText("/ " + timecode(total, fps))
+            self.total_label.setText(timecode(total, fps))
 
 
 def add_step_keys(widget, timeline):

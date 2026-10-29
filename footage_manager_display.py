@@ -46,10 +46,13 @@ def get_display_rows(project_db, id_list):
 
     conn = sqlite3.connect(project_db)
     cur = conn.cursor()
+    from footage_names import ensure_column
+    ensure_column(conn)
 
     placeholders = ",".join("?" for _ in id_list)
     cur.execute(f"""
-        SELECT id, filename, original_path, file_type, size_bytes, duration
+        SELECT id, COALESCE(NULLIF(display_name, ''), filename), original_path,
+               file_type, size_bytes, duration
         FROM footage
         WHERE id IN ({placeholders})
     """, id_list)

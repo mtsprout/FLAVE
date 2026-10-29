@@ -236,6 +236,11 @@ class FootageManager(QMainWindow):
 
         self._create_menus()
         self._restore_geometry()
+        # F2 renames the selected footage item
+        from PySide6.QtGui import QKeySequence, QShortcut
+        sc = QShortcut(QKeySequence(Qt.Key_F2), self.table)
+        sc.setContext(Qt.WidgetWithChildrenShortcut)
+        sc.activated.connect(self._rename_current)
         self.refresh()
 
     def _create_menus(self):
@@ -521,13 +526,58 @@ class FootageManager(QMainWindow):
             menu.exec(self.table.viewport().mapToGlobal(pos))
             return
         menu.addSeparator()
+        rename_action = menu.addAction("Rename...")
         replace_action = menu.addAction("Replace")
         remove_action = menu.addAction("Remove")
         action = menu.exec(self.table.viewport().mapToGlobal(pos))
-        if action == replace_action:
+        if action == rename_action:
+            self._rename_footage(footage_id)
+        elif action == replace_action:
             self._replace_footage(footage_id)
         elif action == remove_action:
             self._remove_footage(footage_id)
+
+    def _rename_footage(self, footage_id):
+        # The item's own name (footage_names.py); empty goes back to the
+        # file name. The file itself is not touched.
+        from PySide6.QtWidgets import QInputDialog, QLineEdit
+        row = self._row_of_footage(footage_id)
+        item = self.table.item(row, 1) if row >= 0 else None
+        current = item.text() if item is not None else ""
+        name, ok = QInputDialog.getText(
+            self, "Rename Footage", "Name (empty = the file name):",
+            QLineEdit.Normal, current)
+        if not ok:
+            return
+        try:
+            from undo import push_undo
+            push_undo(self.project_db, "Rename footage")
+            from footage_names import set_display_name
+            set_display_name(self.project_db, footage_id, name)
+        except Exception as e:
+            QMessageBox.warning(self, "Rename", f"Could not rename: {e}")
+            return
+        self.refresh()
+        try:
+            import sequence_timeline
+            for tl in list(sequence_timeline._open_windows.values()):
+                tl.refresh()            # clip titles follow
+        except Exception as e:
+            print(f"Rename timeline refresh failed: {e}")
+        self.status_bar.showMessage("Renamed", 3000)
+
+    def _row_of_footage(self, footage_id):
+        for r in range(self.table.rowCount()):
+            it = self.table.item(r, 1)
+            if it is not None and it.data(Qt.UserRole) == footage_id:
+                return r
+        return -1
+
+    def _rename_current(self):
+        row = self.table.currentRow()
+        it = self.table.item(row, 1) if row >= 0 else None
+        if it is not None and it.data(Qt.UserRole) is not None:
+            self._rename_footage(it.data(Qt.UserRole))
 
     def _replace_footage(self, footage_id):
         QMessageBox.information(self, "Replace", f"Replace stub for id {footage_id}")
