@@ -14,8 +14,8 @@ any other AI) until it matches how *you* work -- add what you use, rip
 out what you do not. You should not need a locked installer or someone
 else's roadmap.
 
-FLAVE runs on Windows 10 or 11 with an NVIDIA GPU today. The design should be
-portable to Linux or Mac, but that has not been tested; see the stack
+FLAVE runs on Windows 10 or 11 with an NVIDIA GPU. This fork also runs on
+macOS (see **FLAVE for Mac** below); Linux has not been tried. See the stack
 notes below for the Windows-specific pieces.
 
 Find me: [X / FilmLadd](https://x.com/FilmLadd) · [YouTube](https://www.youtube.com/@FilmLadd)
@@ -24,29 +24,28 @@ Find me: [X / FilmLadd](https://x.com/FilmLadd) · [YouTube](https://www.youtube
 with attribution; see [LICENSE](LICENSE). The software itself may not
 be sold.
 
-## FLAVE for Mac 0.1.0-alpha
+## FLAVE for Mac
 
-First macOS release: FLAVE runs on a Mac with no NVIDIA GPU, in one main
-window (footage and sequences left, player centre, timelines along the
-bottom, Render as a side panel). Preview, playback, thumbnails and export
-(H.264 / H.265, with an Output Size choice) all run on the CPU. New
-oversized footage is dropped scaled to fit, fades and cross dissolves are one click (Transitions menu, or Fade in the clip's right-click menu), and a drop with no track under
-it creates the track(s) it needs. Known gaps: proxy generation (NVENC only), screen capture, the title-bar screenshot
-button (off on macOS), and heavy 4K multi-layer timelines are slow. The
-Windows / NVIDIA path is unchanged but was not tested on this branch.
+This fork also runs on macOS, with no NVIDIA GPU, as **FLAVE for Mac
+0.2.0-alpha**: the same editor in one main window (Footage and Sequences
+on the left, the player in the middle, timelines along the bottom, Render
+as a side panel). Compositing, preview, playback and thumbnails run on the
+CPU (`cpu_compositor.py`, `sequence_player_cpu.py`); renders can use the
+Mac's video hardware (VideoToolbox) or x264 / x265. It adds a few things
+the original does not have (Finder drag and drop, fades and cross
+dissolves, In / Out points, footage names, fit scaling), and it lacks a few
+things the original has (proxy generation, screen capture).
 
-## macOS / no NVIDIA (CPU backend)
-
-On macOS, or with `FLAVE_BACKEND=cpu`, FLAVE skips CUDA, NVDEC, nvJPEG
-and OpenGL entirely: `cpu_compositor.py` (numpy blend, ffmpeg decode,
-Qt JPEG), `sequence_player_cpu.py` (QImage-painted Sequence Player)
-and the CPU branches in `render_manager.py` and
-`footage_manager_display.py`. Setup: `pip install PySide6 numpy pillow` (pillow is optional but makes
-playback smoother),
-ffmpeg and ffprobe on PATH, `python project_manager.py`. Exports use
-libx264 / libx265. Not ported yet: proxy
-generation (NVENC only), screen capture (`flave_capture.py`).
-Playback speed depends on the CPU and sequence size.
+- **Full list of gaps, differences and gotchas: [MACOS-PORT.md](MACOS-PORT.md).**
+- Run it: `pip install PySide6 numpy pillow` (Pillow is optional but makes
+  playback smoother), `brew install ffmpeg`, then `python project_manager.py`.
+  On macOS the CPU backend and the main window are the default;
+  `FLAVE_BACKEND=cuda` and `FLAVE_UI=windows` switch back to the original
+  behaviour.
+- Make a Mac app: `packaging/build_app.sh` builds `dist/FLAVE for Mac.app`
+  (details in `packaging/README.md`).
+- Nothing from this fork has been submitted to the original repository,
+  and the Windows / NVIDIA path is untested on this branch.
 
 ## What you need to run
 
