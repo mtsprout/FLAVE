@@ -8,8 +8,8 @@
 from PySide6.QtCore import QPointF, QRectF, QSize, Qt, QTimer
 from PySide6.QtGui import (QColor, QFont, QKeySequence, QPainter, QPainterPath,
                            QShortcut)
-from PySide6.QtWidgets import (QAbstractButton, QHBoxLayout, QLabel, QSizePolicy,
-                               QWidget)
+from PySide6.QtWidgets import (QAbstractButton, QComboBox, QHBoxLayout, QLabel,
+                               QSizePolicy, QWidget)
 
 import theme
 
@@ -170,6 +170,19 @@ class TransportBar(QWidget):
         lay.addWidget(self.time_label)
         lay.addSpacing(10)
         lay.addWidget(self.total_label)
+        lay.addSpacing(24)
+        # Playback Size: the same setting as the player's right-click menu
+        from sequence_player import PLAYBACK_SIZE_CHOICES
+        size_lbl = QLabel("Size")
+        size_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        self.size_combo = QComboBox()
+        self.size_combo.setToolTip("Playback size: how much of the player the picture fills")
+        for pct in PLAYBACK_SIZE_CHOICES:
+            self.size_combo.addItem("Fit" if pct == 100 else "%d%%" % pct, pct)
+        self.size_combo.setFocusPolicy(Qt.NoFocus)
+        self.size_combo.activated.connect(self._size_chosen)
+        lay.addWidget(size_lbl)
+        lay.addWidget(self.size_combo)
         lay.addStretch(1)
         self._shown = None
         self._timer = QTimer(self)
@@ -184,7 +197,32 @@ class TransportBar(QWidget):
         except Exception as e:
             print("Transport %s failed: %s" % (name, e))
 
+    def _size_chosen(self, index):
+        from global_settings import _set_global_setting
+        from sequence_player import PLAYBACK_SIZE_KEY
+        pct = int(self.size_combo.itemData(index))
+        _set_global_setting(PLAYBACK_SIZE_KEY, str(pct))
+        pl = getattr(self.timeline, "_player", None)
+        if pl is not None and not getattr(pl, "closed", False):
+            pl._playback_pct = pct
+            try:
+                pl._present(True, pl.shown_frame is not None)
+            except Exception as e:
+                print("Playback size redraw failed: %s" % e)
+
+    def _sync_size(self):
+        # follows the right-click menu (or another player's choice)
+        pl = getattr(self.timeline, "_player", None)
+        if pl is None or getattr(pl, "closed", False):
+            return
+        i = self.size_combo.findData(int(pl._playback_pct))
+        if i >= 0 and i != self.size_combo.currentIndex() and not self.size_combo.view().isVisible():
+            self.size_combo.blockSignals(True)
+            self.size_combo.setCurrentIndex(i)
+            self.size_combo.blockSignals(False)
+
     def refresh(self):
+        self._sync_size()
         tl = self.timeline
         try:
             frame, fps = int(tl.current_frame), float(tl.fps)
