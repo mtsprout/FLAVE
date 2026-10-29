@@ -526,6 +526,32 @@ def _toggle_track_flag(self, track_id, column):
     self._after_track_change()
 
 
+def _footage_track_type(frow):
+    # The track type (video, audio or image) a footage row (filename,
+    # original_path) belongs on, from its extension; None if it has none
+    for kind in ("video", "audio", "image"):
+        wanted = TRACK_FOOTAGE_EXTENSIONS[kind]
+        if any(v and str(v).lower().endswith(wanted) for v in frow):
+            return kind
+    return None
+
+
+def _new_track(self, cur, track_type):
+    # Append a track of track_type (default name Video01 ...) to this
+    # sequence inside the caller's transaction; returns its id
+    from track_names import next_default_name
+    cur.execute("SELECT name FROM tracks WHERE sequence_id = ?",
+                (self.sequence_id,))
+    name = next_default_name(track_type, [r[0] for r in cur.fetchall()])
+    cur.execute("SELECT COALESCE(MAX(sort_order), -1) + 1 FROM tracks "
+                "WHERE sequence_id = ?", (self.sequence_id,))
+    sort_order = cur.fetchone()[0]
+    cur.execute("INSERT INTO tracks (sequence_id, name, track_type, sort_order, "
+                "language) VALUES (?, ?, ?, ?, '')",
+                (self.sequence_id, name, track_type, sort_order))
+    return cur.lastrowid
+
+
 def _fit_new_clip(self, cur, clip_id, footage_id):
     # Footage larger than the sequence is dropped scaled to fit (clip_fit.py)
     # instead of 1:1 and cropped. CPU backend only; the CUDA path keeps the
@@ -551,14 +577,16 @@ def drop_footage(self, footage_id, row, x_in_clips):
     # Insert a clip: image footage on image tracks (one second), video on
     # video (full length, fitted to the room), audio on audio
     # (full length)
-    if row < 0 or x_in_clips < 0:
+    if x_in_clips < 0:
         return False
-    name_item = self.table.item(row, 0)
-    if name_item is None:
-        return False
-    track_id = name_item.data(Qt.UserRole)
-    track_type = (name_item.data(Qt.UserRole + 4) or "").lower()
-    if track_id is None or track_type not in CLIP_TRACK_TYPES:
+    # Nothing under the cursor (an empty sequence, or below the last track):
+    # the track(s) the footage needs are made by the drop
+    name_item = self.table.item(row, 0) if row >= 0 else None
+    track_id = name_item.data(Qt.UserRole) if name_item is not None else None
+    new_tracks = track_id is None
+    track_type = ("" if new_tracks
+                  else (name_item.data(Qt.UserRole + 4) or "").lower())
+    if not new_tracks and track_type not in CLIP_TRACK_TYPES:
         self.status_bar.showMessage("Drop footage on an image, video or audio track", 3000)
         return False
     project_db = self._project_db()
@@ -571,6 +599,13 @@ def drop_footage(self, footage_id, row, x_in_clips):
         cur = conn.cursor()
         cur.execute("SELECT filename, original_path FROM footage WHERE id = ?", (footage_id,))
         frow = cur.fetchone()
+        if new_tracks:
+            track_type = _footage_track_type(frow)
+            if track_type is None:
+                conn.close()
+                self.status_bar.showMessage(
+                    "That footage is not an image, video or audio file", 3000)
+                return False
         # Image on image tracks, video on video tracks, audio on audio tracks
         wanted = TRACK_FOOTAGE_EXTENSIONS[track_type]
         matches = bool(frow) and any(
@@ -594,13 +629,28 @@ def drop_footage(self, footage_id, row, x_in_clips):
         # only that room, the tightest across the video and audio tracks
         # (fit_video_drop), so they stay in sync.
         audio_track_id = None
+        if new_tracks:
+            # One undo step for the tracks and the clip (the tracks are
+            # written after the step is saved, so Undo removes them too)
+            from undo import push_undo
+            push_undo(project_db, "Add clip")
+            track_id = _new_track(self, cur, track_type)
         if track_type == "video":
             peak_seconds = self._peaks_seconds(cur, footage_id)
+            if (new_tracks and peak_seconds > 0
+                    and self._first_audio_track_id(cur) is None):
+                _new_track(self, cur, "audio")      # for the linked audio
             linked = peak_seconds > 0 and self._first_audio_track_id(cur) is not None
             full = footage_length_frames(cur, footage_id, self.fps, peak_seconds)
             length_frames, audio_track_id, refused = fit_video_drop(
                 self, cur, track_id, start_frame, full, linked,
                 lambda tid, st: next_clip_room(cur, tid, st))
+            if refused == "audio" and new_tracks:
+                # every audio track is busy here: one more for this clip
+                _new_track(self, cur, "audio")
+                length_frames, audio_track_id, refused = fit_video_drop(
+                    self, cur, track_id, start_frame, full, linked,
+                    lambda tid, st: next_clip_room(cur, tid, st))
             # Refuse the drop (insert nothing) if the drop frame is inside a
             # clip on the video track, or no audio track is free there
             if refused:
@@ -609,8 +659,9 @@ def drop_footage(self, footage_id, row, x_in_clips):
                     f"Drop refused: overlaps a clip on the {refused} track", 3000)
                 return False
         # All drops start at source frame 0
-        from undo import push_undo
-        push_undo(project_db, "Add clip")
+        if not new_tracks:
+            from undo import push_undo
+            push_undo(project_db, "Add clip")
         cur.execute(
             "INSERT INTO clips (track_id, footage_id, start_frame, length_frames, in_frame) "
             "VALUES (?, ?, ?, ?, 0)",
