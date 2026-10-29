@@ -31,8 +31,7 @@ window (footage and sequences left, player centre, timelines along the
 bottom, Render as a side panel). Preview, playback, thumbnails and export
 (H.264 / H.265, with an Output Size choice) all run on the CPU. New
 oversized footage is dropped scaled to fit, and a drop with no track under
-it creates the track(s) it needs. Known gaps: the border outline effect,
-proxy generation (NVENC only), screen capture, the title-bar screenshot
+it creates the track(s) it needs. Known gaps: proxy generation (NVENC only), screen capture, the title-bar screenshot
 button (off on macOS), and heavy 4K multi-layer timelines are slow. The
 Windows / NVIDIA path is unchanged but was not tested on this branch.
 
@@ -45,7 +44,7 @@ and the CPU branches in `render_manager.py` and
 `footage_manager_display.py`. Setup: `pip install PySide6 numpy pillow` (pillow is optional but makes
 playback smoother),
 ffmpeg and ffprobe on PATH, `python project_manager.py`. Exports use
-libx264 / libx265. Not ported yet: the border outline effect, proxy
+libx264 / libx265. Not ported yet: proxy
 generation (NVENC only), screen capture (`flave_capture.py`).
 Playback speed depends on the CPU and sequence size.
 

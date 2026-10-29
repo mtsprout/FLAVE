@@ -7,7 +7,10 @@
 # mapping, rotate about the layer center, crop test on source pixel centers,
 # chroma stack, contrast / brightness / gamma, opacity * alpha blend.
 # Decode is cpu_decoder.CpuDecoder (ffmpeg pipe), no device memory.
-# Not implemented yet: the border outline band (layer item [15]).
+# The border outline (layer item [15]) is the PTX kernel's rule: for a pixel
+# the layer does not draw, the distance outside the visible rectangle (after
+# crop, scale and rotate) along each axis; inside the width on both, it is
+# the outline colour (a square-cornered band), blended with the clip opacity.
 # The render calls frames_rgb(frames, snapshot) -> RGB24 bytes per frame
 # and close(), the same two calls as render_manager._RenderGpu. ASCII only.
 
@@ -134,16 +137,44 @@ def blend_layer(dst, src, scale=None, pos_dx=None, pos_dy=None,
         from sequence_player import _chroma_key_rows
         keys = _chroma_key_rows(chroma)
 
+    # Border outline (width, r, g, b, a): width in sequence pixels
+    ow, orgb, oa = 0.0, None, 0.0
+    if outline is not None:
+        try:
+            ow = float(max(0, int(outline[0]))) * k_pos
+            orgb = np.array([max(0, min(255, int(outline[i]))) for i in (1, 2, 3)],
+                            np.float32)
+            oa = max(0, min(255, int(outline[4]))) / 255.0 * op
+        except (TypeError, ValueError, IndexError):
+            ow = 0.0
+    edges = None
+    if ow > 0.0:
+        lx, hx = _band_edges(crops[0], sw)
+        ly, hy = _band_edges(crops[1], sh)
+        if lx < hx and ly < hy:
+            edges = (lx, hx, ly, hy)
+
     xs = np.arange(W, dtype=np.float32) + (0.5 - W * 0.5 - pdx)
     ys = np.arange(H, dtype=np.float32) + (0.5 - H * 0.5 - pdy)
     if rs == 0.0 and rc == 1.0:
         # Separable: source column per dst column, source row per dst row
-        sx = np.rint(xs * invs + (W * 0.5 + ox - 0.5)).astype(np.int64)
-        sy = np.rint(ys * invsy + (H * 0.5 + oy - 0.5)).astype(np.int64)
+        fxs = xs * invs + (W * 0.5 + ox - 0.5)
+        fys = ys * invsy + (H * 0.5 + oy - 0.5)
+        sx = np.rint(fxs).astype(np.int64)
+        sy = np.rint(fys).astype(np.int64)
         vx = ((sx >= 0) & (sx < sw) & (sx + 0.5 >= crops[0])
               & (sx + 0.5 <= sw - crops[0]))
         vy = ((sy >= 0) & (sy < sh) & (sy + 0.5 >= crops[1])
               & (sy + 0.5 <= sh - crops[1]))
+        if edges is not None:
+            lx, hx, ly, hy = edges
+            dxs = np.maximum(np.maximum(lx - fxs, fxs - hx), 0.0) / invs
+            dys = np.maximum(np.maximum(ly - fys, fys - hy), 0.0) / invsy
+            ix, iy = np.nonzero(dxs < ow)[0], np.nonzero(dys < ow)[0]
+            if len(ix) and len(iy):
+                outside = ~(vy[iy][:, None] & vx[ix][None, :])
+                sel = np.ix_(iy, ix)
+                dst[sel] = _mix_solid(dst[sel], outside, orgb, oa)
         xi, yi = np.nonzero(vx)[0], np.nonzero(vy)[0]
         if not len(xi) or not len(yi):
             return
@@ -171,16 +202,45 @@ def blend_layer(dst, src, scale=None, pos_dx=None, pos_dy=None,
     Y = np.broadcast_to(ys[:, None], (H, W))
     u = X * rc + Y * rs
     v = Y * rc - X * rs
-    sx = np.rint(u * invs + (W * 0.5 + ox - 0.5)).astype(np.int64)
-    sy = np.rint(v * invsy + (H * 0.5 + oy - 0.5)).astype(np.int64)
+    fxs = u * invs + (W * 0.5 + ox - 0.5)
+    fys = v * invsy + (H * 0.5 + oy - 0.5)
+    sx = np.rint(fxs).astype(np.int64)
+    sy = np.rint(fys).astype(np.int64)
     m = ((sx >= 0) & (sx < sw) & (sy >= 0) & (sy < sh)
          & (sx + 0.5 >= crops[0]) & (sx + 0.5 <= sw - crops[0])
          & (sy + 0.5 >= crops[1]) & (sy + 0.5 <= sh - crops[1]))
+    if edges is not None:
+        lx, hx, ly, hy = edges
+        dxs = np.maximum(np.maximum(lx - fxs, fxs - hx), 0.0) / invs
+        dys = np.maximum(np.maximum(ly - fys, fys - hy), 0.0) / invsy
+        band = (dxs < ow) & (dys < ow) & ~m
+        if band.any():
+            dst[band] = _mix_solid(dst[band], None, orgb, oa)
     if not m.any():
         return
     patch = src[sy[m], sx[m]]
     cur = dst[m]
     dst[m] = _mix(cur, patch, keys, k_, b_, g_, op)
+
+
+def _band_edges(crop, size):
+    # The visible source columns (rows) as coordinate edges lo .. hi, after
+    # the symmetric crop (the kernel's OUTLINE math)
+    lo = max(0.0, math.ceil(crop - 0.5)) - 0.5
+    hi = min(size - 1.0, math.floor(size - crop - 0.5)) + 0.5
+    return lo, hi
+
+
+def _mix_solid(cur, outside, rgb, alpha):
+    # cur uint8 (..., 3): the pixels where outside is True blended toward the
+    # solid colour rgb with alpha; outside None = every pixel
+    out = cur.astype(np.float32)
+    delta = (rgb - out) * alpha
+    if outside is None:
+        out += delta
+    else:
+        out += delta * outside[..., None]
+    return np.clip(np.rint(out), 0, 255).astype(np.uint8)
 
 
 def _mix(cur, patch, keys, k_, b_, g_, op):
