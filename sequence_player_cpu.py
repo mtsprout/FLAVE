@@ -26,6 +26,7 @@ except ImportError:
     _PilImage = None
 
 PLAY_DECODE_THREADS = 3
+PICTURE_MARGIN = 8       # logical px between the player edge and the picture
 
 
 def _theme_is_dark():
@@ -144,7 +145,14 @@ class SequencePlayerCpu(SequencePlayer):
         p.fillRect(rect, QColor(28, 28, 28) if dark else QColor(214, 214, 214))
         if not has_frame or self._img is None:
             return
-        ww, wh = float(size.width()), float(size.height())
+        # The picture sits inside a small margin on every side, so its
+        # outline is always visible, also at 100% (fill the player)
+        margin = float(PICTURE_MARGIN)
+        ww = float(size.width()) - 2.0 * margin
+        wh = float(size.height()) - 2.0 * margin
+        if ww < 16.0 or wh < 16.0:
+            margin = 0.0
+            ww, wh = float(size.width()), float(size.height())
         seq_aspect = self.seq_w / float(self.seq_h)
         win_aspect = ww / wh
         if win_aspect > seq_aspect:
@@ -153,14 +161,14 @@ class SequencePlayerCpu(SequencePlayer):
             vw, vh = 1.0, win_aspect / seq_aspect
         vw, vh = playback_rect(vw, vh, self._playback_pct)
         pw, ph = vw * ww, vh * wh
-        target = QRectF((ww - pw) / 2.0, (wh - ph) / 2.0, pw, ph)
+        target = QRectF(margin + (ww - pw) / 2.0, margin + (wh - ph) / 2.0, pw, ph)
         p.setRenderHint(QPainter.SmoothPixmapTransform, True)
         p.drawImage(target, self._img)
-        # A thin outline just outside the picture sets a dark frame apart
-        # from the surround
+        # A thin outline around the picture sets a dark frame apart from
+        # the surround
         p.setPen(QColor(110, 110, 110) if dark else QColor(150, 150, 150))
         p.setBrush(Qt.NoBrush)
-        p.drawRect(target.adjusted(-1.0, -1.0, 0.0, 0.0))
+        p.drawRect(target.adjusted(-0.5, -0.5, 0.5, 0.5))
         try:
             self._paint_captions_cpu(p, target)
         except Exception as e:
