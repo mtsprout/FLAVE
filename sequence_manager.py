@@ -328,9 +328,11 @@ class SequenceManager(QMainWindow):
         new_action = menu.addAction("New Sequence")
         new_action.setEnabled(self.add_action.isEnabled())
         edit_action = settings_action = replace_action = remove_action = None
+        rename_action = None
         if sequence_id is not None:
             menu.addSeparator()
-            edit_action = menu.addAction("Edit")
+            edit_action = menu.addAction("Open Timeline")
+            rename_action = menu.addAction("Rename")
             settings_action = menu.addAction("Settings")
             replace_action = menu.addAction("Replace")
             remove_action = menu.addAction("Remove")
@@ -341,6 +343,8 @@ class SequenceManager(QMainWindow):
             self._add_sequence()
         elif action == edit_action:
             self._edit_sequence(sequence_id)
+        elif rename_action is not None and action == rename_action:
+            self.table.editItem(name_item)
         elif action == settings_action:
             self._sequence_settings(sequence_id)
         elif action == replace_action:

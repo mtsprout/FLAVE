@@ -15,7 +15,7 @@
 import os
 
 from PySide6.QtCore import Qt, QByteArray
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QFont
 from PySide6.QtWidgets import (QDockWidget, QLabel, QMenu, QStackedWidget,
                                QTabBar, QTabWidget, QToolButton, QWidget)
 
@@ -58,6 +58,56 @@ def embed(win):
     return win
 
 
+def slim_title(dock, text):
+    # A thin small-caps title instead of the stock bar with its buttons
+    # (text None: no title at all, the tab bar under it is the header)
+    if text is None:
+        bar = QWidget()
+        bar.setFixedHeight(0)
+        dock.setTitleBarWidget(bar)
+        return
+    label = QLabel(text.upper())
+    font = QFont(label.font())
+    font.setPointSizeF(max(8.0, font.pointSizeF() - 2.0))
+    font.setWeight(QFont.DemiBold)
+    font.setLetterSpacing(QFont.AbsoluteSpacing, 0.8)
+    label.setFont(font)
+    label.setStyleSheet("color: gray; padding: 5px 10px 3px 10px;")
+    dock.setTitleBarWidget(label)
+
+
+def manage_columns(table, key, default_hidden):
+    # Columns a panel hides by default; a right-click on the header turns
+    # any of them on or off, and the choice is remembered (setting key)
+    from PySide6.QtWidgets import QMenu as _Menu
+    from global_settings import _get_global_setting, _set_global_setting
+    saved = _get_global_setting(key, None)
+    raw = default_hidden if saved in (None, "") else saved
+    hidden = set(int(v) for v in str(raw).split(",") if v.strip().isdigit())
+    for col in range(table.columnCount()):
+        table.setColumnHidden(col, col in hidden)
+    header = table.horizontalHeader()
+    header.setContextMenuPolicy(Qt.CustomContextMenu)
+
+    def menu(pos):
+        m = _Menu(table)
+        for col in range(table.columnCount()):
+            item = table.horizontalHeaderItem(col)
+            if item is None or not item.text():
+                continue
+            act = m.addAction(item.text())
+            act.setCheckable(True)
+            act.setChecked(not table.isColumnHidden(col))
+            act.setData(col)
+        chosen = m.exec(header.mapToGlobal(pos))
+        if chosen is None:
+            return
+        table.setColumnHidden(int(chosen.data()), not chosen.isChecked())
+        now = [str(c) for c in range(table.columnCount()) if table.isColumnHidden(c)]
+        _set_global_setting(key, ",".join(now) or "-")
+    header.customContextMenuRequested.connect(menu)
+
+
 def _placeholder(text):
     label = QLabel(text)
     label.setAlignment(Qt.AlignCenter)
@@ -88,6 +138,8 @@ class Workspace(object):
         self.sequence_dock = self._dock("sequences", "Sequences",
                                         Qt.LeftDockWidgetArea,
                                         _placeholder("No project open"))
+        slim_title(self.footage_dock, "Footage")
+        slim_title(self.sequence_dock, "Sequences")
         pm.splitDockWidget(self.footage_dock, self.sequence_dock, Qt.Vertical)
 
         self.timeline_tabs = QTabWidget()
@@ -104,6 +156,8 @@ class Workspace(object):
         self.render_dock = self._dock("render", "Render", Qt.RightDockWidgetArea,
                                       self.render_tabs)
         self.render_dock.hide()
+        slim_title(self.timeline_dock, None)
+        slim_title(self.render_dock, None)
 
         self._build_menus()
         pm.resizeDocks([self.footage_dock], [440], Qt.Horizontal)
@@ -254,9 +308,68 @@ class Workspace(object):
 
     def open_footage(self, win):
         self._set_panel(self.footage_dock, win)
+        # the proxy / codec / pixel-aspect columns start hidden (header
+        # right-click turns them on); double-click adds the clip
+        manage_columns(win.table, "footage_cols_hidden", "2,3,9,10")
+        win.table.cellDoubleClicked.connect(
+            lambda row, col, w=win: self._footage_double_clicked(w, row))
 
     def open_sequences(self, win):
         self._set_panel(self.sequence_dock, win)
+        from PySide6.QtWidgets import QTableWidget
+        # double-click opens the timeline (Enter / F2 renames)
+        win.table.setEditTriggers(QTableWidget.EditKeyPressed)
+        manage_columns(win.table, "sequence_cols_hidden", "6,8,9")
+        win.table.cellDoubleClicked.connect(
+            lambda row, col, w=win: self._sequence_double_clicked(w, row))
+
+    def _sequence_double_clicked(self, win, row):
+        sid = win.table._row_id(row)
+        if sid is not None:
+            self.open_timeline(int(sid))
+
+    def _footage_double_clicked(self, win, row):
+        item = win.table.item(row, 1)
+        fid = item.data(Qt.UserRole) if item is not None else None
+        if fid is not None:
+            self.add_footage_at_playhead(int(fid))
+
+    def add_footage_at_playhead(self, footage_id):
+        # Double-click on footage: a clip at the playhead on the first track
+        # of its kind that is free there, else on new track(s)
+        import sqlite3
+        from sequence_timeline_sql import _footage_track_type
+        tl = self._front_timeline()
+        if tl is None:
+            self.pm.status_bar.showMessage(
+                "Open a timeline first (double-click a sequence)", 4000)
+            return
+        conn = sqlite3.connect(tl._project_db())
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT filename, original_path FROM footage WHERE id = ?",
+                        (int(footage_id),))
+            frow = cur.fetchone()
+            kind = _footage_track_type(frow) if frow else None
+            if kind is None:
+                self.pm.status_bar.showMessage(
+                    "That footage is not an image, video or audio file", 4000)
+                return
+            frame = int(tl.current_frame)
+            tl._jump_to_frame(frame)            # the playhead is in view
+            x = ((frame - tl.view_start_frame) * tl.pixels_per_frame
+                 + tl.pixels_per_frame * 0.5)
+            rows = []
+            for r in range(tl.table.rowCount()):
+                it = tl.table.item(r, 0)
+                if it is not None and (it.data(Qt.UserRole + 4) or "").lower() == kind:
+                    if not tl._range_overlaps(cur, it.data(Qt.UserRole), frame, 1):
+                        rows.append(r)
+        finally:
+            conn.close()
+        for r in rows + [-1]:
+            if tl.drop_footage(int(footage_id), r, x):
+                return
 
     def show_dock(self, dock):
         dock.show()
