@@ -293,6 +293,13 @@ def build_ffmpeg_cmd(out_path, width, height, fps, encoder, gop, target_mbps,
         cmd += ["-c:v", "hevc_nvenc", "-profile:v", "main", "-rc", "vbr",
                 "-b:v", t, "-maxrate", b, "-bufsize", b, "-g", str(int(gop)),
                 "-tag:v", "hvc1"]
+    elif encoder in ("h264_videotoolbox", "hevc_videotoolbox"):
+        cmd += ["-c:v", encoder, "-b:v", t, "-maxrate", b, "-g", str(int(gop)),
+                "-allow_sw", "0"]
+        if encoder == "h264_videotoolbox":
+            cmd += ["-profile:v", "high"]
+        else:
+            cmd += ["-tag:v", "hvc1"]
     elif encoder == "libx265":
         cmd += ["-c:v", "libx265", "-profile:v", "main",
                 "-b:v", t, "-maxrate", b, "-bufsize", b, "-g", str(int(gop)),
@@ -349,6 +356,38 @@ def _list_encoders(ffmpeg="ffmpeg"):
     return proc.stdout.decode("ascii", "replace")
 
 
+# Apple VideoToolbox hardware encoders (macOS, CPU backend): codec -> encoder
+VT_ENCODERS = {"H.264": "h264_videotoolbox", "H.265": "hevc_videotoolbox"}
+_vt_ok = {}                # (encoder, w, h) -> test encode ok
+
+
+def videotoolbox_works(codec, width, height, ffmpeg="ffmpeg"):
+    # True when the hardware encoder for codec takes frames of this size.
+    # Tested at the render's own size (the H.264 hardware encoder refuses
+    # very small frames) with software fallback off, so a "hardware" render
+    # is never silently a slow software one. Cached.
+    enc = VT_ENCODERS.get(codec)
+    if enc is None:
+        return False
+    key = (enc, int(width), int(height))
+    if key in _vt_ok:
+        return _vt_ok[key]
+    ok = False
+    try:
+        if (" %s " % enc) in _list_encoders(ffmpeg):
+            test = subprocess.run(
+                [ffmpeg, "-hide_banner", "-loglevel", "error", "-f", "lavfi",
+                 "-i", "color=c=black:s=%dx%d:r=30:d=0.2" % key[1:],
+                 "-c:v", enc, "-allow_sw", "0", "-f", "null", "-"],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                creationflags=_no_window_flags())
+            ok = test.returncode == 0
+    except OSError:
+        ok = False
+    _vt_ok[key] = ok
+    return ok
+
+
 def pick_encoder(codec="H.264", ffmpeg="ffmpeg"):
     # NVENC encoder of the codec if its test encode works, else the CPU
     # encoder (libx264 / libx265). Raises OSError if ffmpeg is missing or
@@ -369,11 +408,20 @@ H264_LIMIT_TEXT = ("H.264 hardware encoding is limited to %d pixels. "
                    "This %s export will use %s.")
 
 
-def encoder_for(codec, width, height, ffmpeg="ffmpeg"):
+def encoder_for(codec, width, height, ffmpeg="ffmpeg", prefer_hw=False):
     # (encoder, warning text or "") for a render of width x
     # height. pick_encoder, except that h264_nvenc over H264_NVENC_MAX
     # in either direction becomes hevc_nvenc (its test encode works) or
     # libx264, with the warning text for the user.
+    # prefer_hw (macOS): the VideoToolbox hardware encoder when it takes this
+    # size, else the CPU encoder, with a warning.
+    if prefer_hw:
+        if videotoolbox_works(codec, width, height, ffmpeg):
+            return VT_ENCODERS[codec], ""
+        warn = ("The hardware encoder does not take this %dx%d size here; "
+                "using the CPU encoder (slower)." % (int(width), int(height)))
+        enc = pick_encoder(codec, ffmpeg)
+        return enc, warn
     enc = pick_encoder(codec, ffmpeg)
     if enc != "h264_nvenc" or (int(width) <= H264_NVENC_MAX
                                and int(height) <= H264_NVENC_MAX):
@@ -679,7 +727,8 @@ class RenderJob(object):
             if not enc:
                 # H.264 over 4096 falls back (encoder_for)
                 enc, warn = encoder_for(p.get("codec", "H.264"), p["width"],
-                                        p["height"], p.get("ffmpeg", "ffmpeg"))
+                                        p["height"], p.get("ffmpeg", "ffmpeg"),
+                                        prefer_hw=bool(p.get("hw")))
                 if warn and self.on_warn is not None:
                     try:
                         self.on_warn(warn)
@@ -735,6 +784,7 @@ class RenderJob(object):
                         self.proc.wait()
                     except Exception:
                         pass
+
                     _remove(out_path)
                     return False, "Render failed at frame %d: %s" % (f, e)
                 try:
@@ -869,6 +919,19 @@ def _make_window_class():
                     "The frame is composited at this size: footage keeps its "
                     "detail, but a larger size renders more slowly.")
                 form.addRow("Output Size", self.size_combo)
+            # Hardware (VideoToolbox) or CPU encoder; macOS only
+            self.enc_combo = QComboBox()
+            if sys.platform == "darwin" and use_cpu_backend():
+                from global_settings import _get_global_setting
+                self.enc_combo.addItem("Fast (hardware)", True)
+                self.enc_combo.addItem("High quality (CPU)", False)
+                if (_get_global_setting("render_hw_encode", "1") or "1") == "0":
+                    self.enc_combo.setCurrentIndex(1)
+                self.enc_combo.setToolTip(
+                    "Fast uses the Mac's video hardware (Apple VideoToolbox): "
+                    "several times quicker, slightly lower quality at the "
+                    "same bitrate. High quality uses the CPU encoder (x264 / x265).")
+                form.addRow("Encoder", self.enc_combo)
             self.gop_spin = QSpinBox()
             self.gop_spin.setRange(1, 10000)
             self.gop_spin.setValue(DEFAULT_GOP)
@@ -883,6 +946,12 @@ def _make_window_class():
             self.burst_spin.setDecimals(1)
             self.burst_spin.setValue(DEFAULT_BURST_MBPS)
             form.addRow("Burst Mbps", self.burst_spin)
+            self._bitrate_touched = False
+            self._bitrate_auto = False
+            for spin in (self.target_spin, self.burst_spin):
+                spin.valueChanged.connect(self._bitrate_edited)
+            self.size_combo.currentIndexChanged.connect(self._size_changed)
+            self.enc_combo.currentIndexChanged.connect(self._encoder_changed)
             self.fast_check = QCheckBox("Fast start (YouTube)")
             form.addRow("", self.fast_check)
             audio_row = QHBoxLayout()
@@ -1077,6 +1146,7 @@ def _make_window_class():
                     "captions": caps, "languages": langs,
                     "chunk": chunk,
                     "cuda": not getattr(player, "cpu_backend", False),
+                    "hw": bool(self.enc_combo.count() and self.enc_combo.currentData()),
                 }
             except Exception as e:
                 try:
@@ -1110,6 +1180,32 @@ def _make_window_class():
             self._set_busy(True, "Rendering %d frames to %s ..." % (total, params["out_path"]))
             self.job.start()
             self._pause = None      # Done owns the release now
+
+        def _bitrate_edited(self, _v):
+            if not self._bitrate_auto:
+                self._bitrate_touched = True
+
+        def _size_changed(self, _i):
+            # 5 Mbps is a 1080p number: until the bitrate has been set by
+            # hand, it grows with the number of pixels of the output size
+            wh = self.size_combo.currentData()
+            if self._bitrate_touched or not wh:
+                return
+            scale = (int(wh[0]) * int(wh[1])) / float(1920 * 1080)
+            self._bitrate_auto = True
+            try:
+                self.target_spin.setValue(round(max(DEFAULT_TARGET_MBPS * scale,
+                                                    DEFAULT_TARGET_MBPS), 1))
+                self.burst_spin.setValue(round(max(DEFAULT_BURST_MBPS * scale,
+                                                   DEFAULT_BURST_MBPS), 1))
+            finally:
+                self._bitrate_auto = False
+
+        def _encoder_changed(self, _i):
+            from global_settings import _set_global_setting
+            if self.enc_combo.count():
+                _set_global_setting("render_hw_encode",
+                                    "1" if self.enc_combo.currentData() else "0")
 
         def _fail(self, msg):
             self.job = None

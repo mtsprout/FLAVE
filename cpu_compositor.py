@@ -387,7 +387,9 @@ class CpuComposer(object):
         if self.closed:
             raise RuntimeError("The CPU compositor was released.")
         with self.lock:
-            return [self._frame(f, snapshot).tobytes() for f in frames]
+            # byte views of the frames (no 25 MB copy each at 4K): every
+            # frame is a fresh array, so nothing reuses the memory
+            return [memoryview(self._frame(f, snapshot)).cast("B") for f in frames]
 
     # ---- preview worker (same two calls the GPU composer has)
     def frames_jpeg_batch(self, frames, quality, snapshot):
