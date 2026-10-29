@@ -493,6 +493,11 @@ def _move_track_to(self, track_id, where):
     self._after_track_change()
 
 
+# Display scale of every open track row (timeline_scale.py slider); 1.0 =
+# the saved height_px of each track
+TRACK_HEIGHT_SCALE = [1.0]
+
+
 def track_row_height(open_height, collapsed):
     # The one row-height rule. Every y position (clip paint
     # hit tests, key boxes, markers, drop preview, header cells) comes from
@@ -504,7 +509,9 @@ def track_row_height(open_height, collapsed):
         h = int(open_height)
     except (TypeError, ValueError):
         h = DEFAULT_TRACK_HEIGHT
-    return h if h > 0 else DEFAULT_TRACK_HEIGHT
+    h = h if h > 0 else DEFAULT_TRACK_HEIGHT
+    scale = TRACK_HEIGHT_SCALE[0]
+    return h if scale == 1.0 else max(28, int(round(h * scale)))
 
 
 def _toggle_track_flag(self, track_id, column):

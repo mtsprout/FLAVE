@@ -14,7 +14,7 @@
 
 import os
 
-from PySide6.QtCore import Qt, QByteArray
+from PySide6.QtCore import QByteArray, QEvent, QObject, Qt, QTimer
 from PySide6.QtGui import QAction, QFont
 from PySide6.QtWidgets import (QDockWidget, QLabel, QMenu, QStackedWidget,
                                QTabBar, QTabWidget, QToolButton, QWidget)
@@ -106,6 +106,47 @@ def manage_columns(table, key, default_hidden):
         now = [str(c) for c in range(table.columnCount()) if table.isColumnHidden(c)]
         _set_global_setting(key, ",".join(now) or "-")
     header.customContextMenuRequested.connect(menu)
+
+
+class _LongPress(QObject):
+    # A press that is held (about 0.6 s) without moving calls handler(row)
+    # for the row under it; a click, a drag or a release first does not.
+
+    HOLD_MS = 600
+    SLOP = 6
+
+    def __init__(self, table, handler):
+        super().__init__(table)
+        self.table = table
+        self.handler = handler
+        self._pos = None
+        self._row = -1
+        self._timer = QTimer(self)
+        self._timer.setSingleShot(True)
+        self._timer.setInterval(self.HOLD_MS)
+        self._timer.timeout.connect(self._fire)
+        table.viewport().installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        t = event.type()
+        if t == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
+            self._pos = event.position().toPoint()
+            self._row = self.table.rowAt(self._pos.y())
+            if self._row >= 0:
+                self._timer.start()
+        elif t == QEvent.MouseMove and self._pos is not None:
+            d = event.position().toPoint() - self._pos
+            if abs(d.x()) > self.SLOP or abs(d.y()) > self.SLOP:
+                self._timer.stop()
+        elif t in (QEvent.MouseButtonRelease, QEvent.MouseButtonDblClick,
+                   QEvent.Leave, QEvent.Hide):
+            self._timer.stop()
+        return False
+
+    def _fire(self):
+        row, self._pos = self._row, None
+        if row >= 0:
+            self.handler(row)
 
 
 def _placeholder(text):
@@ -313,6 +354,9 @@ class Workspace(object):
         manage_columns(win.table, "footage_cols_hidden", "2,3,7,8,9,10")
         win.table.cellDoubleClicked.connect(
             lambda row, col, w=win: self._footage_double_clicked(w, row))
+        # press and hold renames
+        win._long_press = _LongPress(
+            win.table, lambda row, w=win: self._footage_long_press(w, row))
 
     def open_sequences(self, win):
         self._set_panel(self.sequence_dock, win)
@@ -322,11 +366,27 @@ class Workspace(object):
         manage_columns(win.table, "sequence_cols_hidden", "6,8,9")
         win.table.cellDoubleClicked.connect(
             lambda row, col, w=win: self._sequence_double_clicked(w, row))
+        win._long_press = _LongPress(
+            win.table, lambda row, w=win: self._sequence_long_press(w, row))
 
     def _sequence_double_clicked(self, win, row):
         sid = win.table._row_id(row)
         if sid is not None:
             self.open_timeline(int(sid))
+
+    def _footage_long_press(self, win, row):
+        item = win.table.item(row, 1)
+        fid = item.data(Qt.UserRole) if item is not None else None
+        if fid is not None:
+            win.table.selectRow(row)
+            win._rename_footage(fid)
+
+    def _sequence_long_press(self, win, row):
+        item = win.table.item(row, 0)
+        if item is not None:
+            win.table.selectRow(row)
+            win.table.setCurrentItem(item)
+            win.table.editItem(item)
 
     def _footage_double_clicked(self, win, row):
         item = win.table.item(row, 1)
@@ -384,6 +444,8 @@ class Workspace(object):
             self.timeline_tabs.setCurrentWidget(win)
             self.show_dock(self.timeline_dock)
             return win
+        from timeline_scale import prime_track_scale, TimelineScaleBar
+        prime_track_scale()                 # compact track rows from the start
         win = st.SequenceTimeline(self.pm, sid)
         win._geometry_ready = False         # the layout remembers the sizes
         embed(win)
@@ -391,6 +453,8 @@ class Workspace(object):
         # (the clips themselves show video / audio / image)
         win.ruler.resizeSection(0, min(win.ruler.sectionSize(0), 120))
         win.ruler.setSectionHidden(1, True)
+        # under the tracks: track height slider and the zoom navigator
+        win.centralWidget().layout().addWidget(TimelineScaleBar(win))
         st._open_windows[sid] = win
         from sequence_timeline_sql import _load_sequence_name
         name = _load_sequence_name(sid) or "Sequence %d" % sid

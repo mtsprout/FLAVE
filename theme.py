@@ -122,6 +122,10 @@ def stylesheet(c):
     QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
     QTabBar QToolButton { color: %(dim)s; padding: 0 4px; font-size: 15px; }
     QTabBar QToolButton:hover { color: %(text)s; background: %(hover)s; }
+    QSlider::groove:horizontal { height: 4px; background: %(border)s; border-radius: 2px; }
+    QSlider::sub-page:horizontal { background: %(accent)s; border-radius: 2px; }
+    QSlider::handle:horizontal { width: 12px; height: 12px; margin: -4px 0;
+        background: %(text)s; border-radius: 6px; }
     QToolTip { background: %(raised)s; color: %(text)s; border: 1px solid %(border)s;
         padding: 3px; }
     """ % c
