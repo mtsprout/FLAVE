@@ -41,6 +41,10 @@ class RulerHeader(QHeaderView):
         self.setSectionsMovable(False)
         self.setFixedHeight(RULER_HEIGHT + PREVIEW_BAR_HEIGHT + AUDIO_BAR_HEIGHT)
         self._dragging = False
+        self._mark_drag = None      # "in" / "out" while a mark handle is held
+        self._mark_grab = 0
+        self.setMouseTracking(True)
+        self.viewport().setMouseTracking(True)      # hover cursor over handles
         # Scrub auto-scroll state
         self._scrub_x = None        # last mouse x in the Clips area
         self._scrub_rem = 0.0       # sub-frame pan remainder (px)
@@ -63,6 +67,69 @@ class RulerHeader(QHeaderView):
         painter.setBrush(color)
         painter.drawPolygon(poly)
         painter.restore()
+
+    def _paint_half(self, painter, x, top, color, side):
+        # Half of the playhead handle: flat edge at x, body on the side of the
+        # range (+1 right = In, -1 left = Out), tip at the bottom of the edge
+        from PySide6.QtCore import QPointF
+        from PySide6.QtGui import QPolygonF
+        w = HEAD_W / 2.0 + 1.0
+        poly = QPolygonF([QPointF(x, top), QPointF(x + side * w, top),
+                          QPointF(x + side * w, top + HEAD_H * 0.55),
+                          QPointF(x, top + HEAD_H)])
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setPen(QPen(color.darker(170), 1))
+        painter.setBrush(color)
+        painter.drawPolygon(poly)
+        painter.restore()
+
+    def _mark_x(self, kind):
+        # Header x of the In (left edge of its frame) or Out (right edge of its
+        # frame) mark, None when not set
+        tl = self.timeline
+        a, b = getattr(tl, "_marks", (None, None)) or (None, None)
+        left = self.sectionViewportPosition(CLIPS_COL)
+        if kind == "in" and a is not None:
+            return int(left + (a - tl.view_start_frame) * tl.pixels_per_frame)
+        if kind == "out" and b is not None:
+            return int(left + (b + 1 - tl.view_start_frame) * tl.pixels_per_frame)
+        return None
+
+    def _hit_mark(self, x, y):
+        # 'in' / 'out' when (x, y) is on that mark's half-handle
+        import workspace
+        if workspace.get() is None or y > HEAD_H + 2:
+            return None
+        w = HEAD_W / 2.0 + 1.0
+        xi, xo = self._mark_x("in"), self._mark_x("out")
+        if xi is not None and xi - 3 <= x <= xi + w + 3:
+            return "in"
+        if xo is not None and xo - w - 3 <= x <= xo + 3:
+            return "out"
+        return None
+
+    def _mark_frame(self, kind, x):
+        # The In / Out frame whose handle edge sits at header x
+        tl = self.timeline
+        left = self.sectionViewportPosition(CLIPS_COL)
+        f = int(round((x - left) / tl.pixels_per_frame)) + tl.view_start_frame
+        if kind == "out":
+            f -= 1
+        return max(0, min(tl.total_frames() - 1, f))
+
+    def _move_mark(self, x):
+        # Live drag of the mark being held; In stays at or before Out
+        tl = self.timeline
+        kind = self._mark_drag
+        a, b = getattr(tl, "_marks", (None, None)) or (None, None)
+        f = self._mark_frame(kind, x - self._mark_grab)
+        if kind == "in":
+            a = f if b is None else min(f, b)
+        else:
+            b = f if a is None else max(f, a)
+        tl._marks = (a, b)
+        self.viewport().update()
 
     def _paint_marks(self, painter, rect, left, start, ppf, total):
         # In / Out marks (marks.py) at the top edge of the ruler: a bracket
@@ -89,14 +156,10 @@ class RulerHeader(QHeaderView):
         if hi > lo:
             painter.fillRect(lo, top, hi - lo, 4, bar)
         painter.fillRect  # (keep the painter state simple)
-        if a is not None and rect.left() <= x_in <= rect.right():
-            painter.fillRect(x_in, top, 2, 15, accent)          # [
-            painter.fillRect(x_in, top, 8, 2, accent)
-            painter.fillRect(x_in, top + 13, 8, 2, accent)
-        if b is not None and rect.left() <= x_out <= rect.right() + 1:
-            painter.fillRect(x_out - 2, top, 2, 15, accent)     # ]
-            painter.fillRect(x_out - 8, top, 8, 2, accent)
-            painter.fillRect(x_out - 8, top + 13, 8, 2, accent)
+        if a is not None and rect.left() - HEAD_W <= x_in <= rect.right():
+            self._paint_half(painter, x_in, top, accent, +1)    # the right half
+        if b is not None and rect.left() <= x_out <= rect.right() + HEAD_W:
+            self._paint_half(painter, x_out, top, accent, -1)   # the left half
 
     def paintSection(self, painter, rect, logical_index):
         if logical_index != CLIPS_COL:
@@ -269,11 +332,21 @@ class RulerHeader(QHeaderView):
     def mousePressEvent(self, event):
         x = int(event.position().x())
         if self.logicalIndexAt(x) == CLIPS_COL and event.button() == Qt.LeftButton:
+            y = int(event.position().y())
+            dx = self._head_hit(x, y)
+            if dx is None:
+                held = self._hit_mark(x, y)
+                if held is not None:
+                    # a press on an In / Out handle holds it (the playhead
+                    # handle wins where they overlap)
+                    self._mark_drag = held
+                    self._mark_grab = x - self._mark_x(held)
+                    return
             self._dragging = True
             self._scrub_x = None
             self._scrub_rem = 0.0
             self._scrub_panned = False
-            self._grab_dx = self._head_offset(x, int(event.position().y()))
+            self._grab_dx = dx or 0
             x -= self._grab_dx
             # A scrubber press while playback is running stops
             # it before the seek, so the move stays on the stopped path
@@ -288,23 +361,31 @@ class RulerHeader(QHeaderView):
             return
         super().mousePressEvent(event)
 
-    def _head_offset(self, x, y):
-        # A press on the playhead handle: how far from its centre, so the drag
-        # carries the playhead instead of jumping it to the click (0 anywhere
-        # else on the ruler, where a click still jumps)
+    def _head_hit(self, x, y):
+        # A press on the playhead handle: how far from its centre (so the drag
+        # carries the playhead instead of jumping it to the click); None when
+        # the press is not on the handle (a click elsewhere still jumps)
         import workspace
         if workspace.get() is None or y > HEAD_H + 2:
-            return 0
+            return None
         tl = self.timeline
         sx = int(self.sectionViewportPosition(CLIPS_COL)
                  + (tl.current_frame - tl.view_start_frame) * tl.pixels_per_frame)
-        return x - sx if abs(x - sx) <= HEAD_GRAB_X else 0
+        return x - sx if abs(x - sx) <= HEAD_GRAB_X else None
 
     def mouseMoveEvent(self, event):
+        if getattr(self, "_mark_drag", None):
+            self._move_mark(int(event.position().x()))
+            return
         if self._dragging:
             # Outside the widget too (the press grabs the mouse)
             self._edge_scrub(int(event.position().x()) - getattr(self, "_grab_dx", 0))
             return
+        # a hand cursor over the playhead / In / Out handles
+        x, y = int(event.position().x()), int(event.position().y())
+        over = (self._head_hit(x, y) is not None
+                or self._hit_mark(x, y) is not None)
+        self.viewport().setCursor(Qt.SizeHorCursor if over else Qt.ArrowCursor)
         super().mouseMoveEvent(event)
 
     def _clips_geometry(self):
@@ -358,6 +439,20 @@ class RulerHeader(QHeaderView):
         self.timeline.wheel_pan(event)
 
     def mouseReleaseEvent(self, event):
+        if getattr(self, "_mark_drag", None):
+            kind, self._mark_drag = self._mark_drag, None
+            tl = self.timeline
+            a, b = tl._marks
+            import marks
+            try:
+                marks._store(tl._project_db(), tl.sequence_id, a, b)
+                from transport import timecode
+                tl.status_bar.showMessage(
+                    "%s moved to %s" % ("In" if kind == "in" else "Out",
+                                        timecode(a if kind == "in" else b, tl.fps)), 3000)
+            except Exception as e:
+                print("Mark not saved: %s" % e)
+            return
         if self._dragging:
             self._dragging = False
             self._edge_timer.stop()
