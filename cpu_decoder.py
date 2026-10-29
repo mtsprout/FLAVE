@@ -377,19 +377,21 @@ class CpuDecoder(object):
         if proc is None or proc.stdout is None:
             return None
         need = self.nbytes
-        buf = bytearray()
+        buf = bytearray(need)
+        view = memoryview(buf)
+        got = 0
         try:
-            while len(buf) < need:
-                chunk = proc.stdout.read(need - len(buf))
-                if not chunk:
+            while got < need:
+                n = proc.stdout.readinto(view[got:])
+                if not n:
                     break
-                buf.extend(chunk)
+                got += n
         except Exception as exc:
             raise footage_decode_error(self.path, exc)
-        if len(buf) == need:
+        if got == need:
             self._next += 1
-            return bytes(buf)
-        if len(buf) > 0:
+            return buf
+        if got > 0:
             raise footage_decode_error(self.path, "short frame from ffmpeg")
         code = proc.poll()
         if code is None:
@@ -475,7 +477,7 @@ class CpuDecoder(object):
         while len(self._pool) <= slot:
             self._pool.append(self._cuda_alloc())
         ptr = self._pool[slot]
-        buf = ctypes.create_string_buffer(raw)
+        buf = ctypes.create_string_buffer(bytes(raw))
         from sequence_player_gpu import _check
         _check(self._cudart.cudaMemcpy(ptr, buf, len(raw), 1), "cpu decode copy")
         return int(ptr.value)

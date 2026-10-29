@@ -41,6 +41,14 @@ def use_cpu_backend():
     return _CPU[0]
 
 
+FAST = True     # fast paths of blend_layer (tests turn it off to compare)
+
+
+def _contiguous(idx):
+    # True when idx is a run of consecutive integers (a 1:1 sampling)
+    return len(idx) == 1 or bool(np.all(np.diff(idx) == 1))
+
+
 def _num(v, default, lo, hi):
     try:
         v = float(v) if v is not None else default
@@ -134,7 +142,22 @@ def blend_layer(dst, src, scale=None, pos_dx=None, pos_dy=None,
         xi, yi = np.nonzero(vx)[0], np.nonzero(vy)[0]
         if not len(xi) or not len(yi):
             return
-        patch = src[np.ix_(sy[yi], sx[xi])]
+        plain = (not keys and k_ == 1.0 and b_ == 0.0 and g_ == 1.0
+                 and op >= 1.0 and src.shape[-1] == 3)
+        if FAST and _contiguous(sx[xi]) and _contiguous(sy[yi]):
+            # 1:1 mapping: source and destination are plain rectangles
+            # (views, no gather)
+            patch = src[sy[yi[0]]:sy[yi[-1]] + 1, sx[xi[0]]:sx[xi[-1]] + 1]
+            view = dst[yi[0]:yi[-1] + 1, xi[0]:xi[-1] + 1]
+            if plain:
+                view[...] = patch
+            else:
+                view[...] = _mix(view, patch, keys, k_, b_, g_, op)
+            return
+        patch = src.take(sy[yi], axis=0).take(sx[xi], axis=1)
+        if FAST and plain and len(xi) == W and len(yi) == H:
+            dst[...] = patch
+            return
         sel = np.ix_(yi, xi)
         dst[sel] = _mix(dst[sel], patch, keys, k_, b_, g_, op)
         return
