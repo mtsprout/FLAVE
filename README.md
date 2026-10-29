@@ -24,7 +24,7 @@ Find me: [X / FilmLadd](https://x.com/FilmLadd) · [YouTube](https://www.youtube
 with attribution; see [LICENSE](LICENSE). The software itself may not
 be sold.
 
-## Version 0.1.0-alpha (macOS)
+## FLAVE for Mac 0.1.0-alpha
 
 First macOS release: FLAVE runs on a Mac with no NVIDIA GPU, in one main
 window (footage and sequences left, player centre, timelines along the

@@ -144,8 +144,8 @@ class ProjectManager(QMainWindow):
         import workspace
         self.workspace = workspace.install(self) if workspace.enabled() else None
         if self.workspace is not None:
-            from version import VERSION
-            self.setWindowTitle("FLAVE %s" % VERSION)
+            from version import APP_NAME, VERSION
+            self.setWindowTitle("%s %s" % (APP_NAME, VERSION))
             self.resize(1500, 950)
             self._add_workspace_menu_items()
         self._restore_geometry()
@@ -183,6 +183,10 @@ class ProjectManager(QMainWindow):
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
         self.exit_action = exit_action
+        about_action = QAction("About FLAVE for Mac", self)
+        about_action.setMenuRole(QAction.AboutRole)
+        about_action.triggered.connect(self._about)
+        file_menu.addAction(about_action)
 
         # Snapshot undo/redo (undo.py), no menu (: the Edit menu
         # is gone). Ctrl+Z / Ctrl+Y are application-wide shortcuts on these
@@ -231,6 +235,24 @@ class ProjectManager(QMainWindow):
         self.footage_mgr_action.setEnabled(False)
         self.footage_mgr_action.triggered.connect(self._open_footage_manager)
         self.windows_menu.addAction(self.footage_mgr_action)
+
+    def _about(self):
+        from version import APP_NAME, VERSION
+        build = ""
+        try:
+            with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                   "counter.txt")) as f:
+                build = "Build %d" % int(f.read().strip())
+        except (OSError, ValueError):
+            pass
+        QMessageBox.about(
+            self, "About " + APP_NAME,
+            "<h3>%s</h3><p>Version %s<br>%s</p>"
+            "<p>The macOS version of FLAVE (FilmLadd Video Editor): the same "
+            "editor, running on the CPU and the Mac's video hardware instead "
+            "of an NVIDIA GPU.</p>"
+            "<p>Free to use, modify and share with attribution; the software "
+            "itself may not be sold. See LICENSE.</p>" % (APP_NAME, VERSION, build))
 
     def _add_workspace_menu_items(self):
         ws = self.workspace
@@ -599,8 +621,8 @@ def print_build():
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "counter.txt")
     try:
         with open(path, "r") as f:
-            from version import VERSION
-            print(f"FLAVE {VERSION} BUILD {int(f.read().strip())}")
+            from version import APP_NAME, VERSION
+            print(f"{APP_NAME} {VERSION} BUILD {int(f.read().strip())}")
     except FileNotFoundError:
         print("BUILD missing")
 
@@ -627,7 +649,16 @@ def main():
         # print("CUDA launch init failed: %s" % e)
         pass
     app = QApplication(sys.argv)
-    app.setApplicationName("LaddVideoEditor")
+    from version import APP_NAME, VERSION
+    app.setApplicationName(APP_NAME)
+    app.setApplicationDisplayName(APP_NAME)
+    app.setApplicationVersion(VERSION)
+    # The FLAVE icon in the Dock and on every window (instead of Python's)
+    icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "assets", "FLAVE.png")
+    if os.path.isfile(icon_path):
+        from PySide6.QtGui import QIcon
+        app.setWindowIcon(QIcon(icon_path))
     # Camera button over every top-level window's title bar
     try:
         from window_snapshot import install_window_snapshots
