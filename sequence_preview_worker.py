@@ -331,7 +331,9 @@ class PreviewWorker(object):
         # Explicit refresh pass = fast mode: no bursts, yields, GUI-quiet
         # waits or sleeps (only a GUI waiting on the lock holds the worker
         # back), big card passes sized from VRAM and fewer commits
-        fast = bool(_refresh_all[0])
+        # (no VRAM plan without CUDA: a refresh is a normal pass over every frame)
+        from cpu_compositor import use_cpu_backend
+        fast = bool(_refresh_all[0]) and not use_cpu_backend()
         if fast:
             import sequence_player_gpu as spg
             # Preview Frame Cap: the upper bound on N (frames per card
@@ -715,6 +717,9 @@ def _setting_int(key, default, lo, hi):
 
 def _headless_active():
     try:
+        from cpu_compositor import use_cpu_backend, cpu_generator_active
+        if use_cpu_backend():
+            return cpu_generator_active()
         from sequence_preview_gpu import headless_active
         return headless_active()
     except Exception:
@@ -723,6 +728,10 @@ def _headless_active():
 
 def _release_headless():
     try:
+        from cpu_compositor import use_cpu_backend, cpu_generator_release
+        if use_cpu_backend():
+            cpu_generator_release()
+            return
         from sequence_preview_gpu import release_headless
         release_headless()
     except Exception as e:

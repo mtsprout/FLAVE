@@ -14,6 +14,7 @@
 import math
 import os
 import sys
+import threading
 
 import numpy as np
 
@@ -213,6 +214,8 @@ class CpuComposer(object):
         self.paths = {}
         self.images = {}
         self.decs = {}          # decoder key -> _Dec, least recently used first
+        self.key = None
+        self.lock = threading.RLock()
 
     class _TL(object):
         def __init__(self, project):
@@ -322,7 +325,40 @@ class CpuComposer(object):
     def frames_rgb(self, frames, snapshot):
         if self.closed:
             raise RuntimeError("The CPU compositor was released.")
-        return [self._frame(f, snapshot).tobytes() for f in frames]
+        with self.lock:
+            return [self._frame(f, snapshot).tobytes() for f in frames]
+
+    # ---- preview worker (same two calls the GPU composer has)
+    def frames_jpeg_batch(self, frames, quality, snapshot):
+        # JPEG bytes per frame (None on a failed frame), Qt encodes
+        # at the project's Preview Size
+        if self.closed or snapshot is None:
+            return None
+        out = []
+        for f in frames:
+            try:
+                out.append(self._jpeg(self.frames_rgb([f], snapshot)[0], quality))
+            except Exception as e:
+                print("CPU compositor frame %s failed: %s" % (f, e))
+                out.append(None)
+        return out
+
+    def frame_jpeg(self, frame, quality=90, snapshot=None, worker=False):
+        # Worker only: the GUI path returns None (the worker fills it)
+        if not worker:
+            return None
+        res = self.frames_jpeg_batch([frame], quality, snapshot)
+        return res[0] if res else None
+
+    def _jpeg(self, rgb, quality):
+        from PySide6.QtCore import QBuffer, QIODevice
+        from sequence_player_preview import _qt_preview_image
+        img = _qt_preview_image(self, rgb)
+        buf = QBuffer()
+        buf.open(QIODevice.WriteOnly)
+        if not img.save(buf, "JPG", quality):
+            return None
+        return bytes(buf.data())
 
     def close(self):
         self.closed = True
@@ -347,9 +383,46 @@ _borrow_done = [False]
 
 
 def new_cpu_composer(project, sequence_id):
-    if not _borrow_done[0]:
-        _borrow()
-        _borrow_done[0] = True
+    _borrow_once()
     from sequence_preview_gpu import _sequence_size
     w, h = _sequence_size(project, sequence_id)
     return CpuComposer(project, sequence_id, w, h)
+
+
+# ---- the preview worker's one composer (sequence_preview_gpu.headless_for)
+_GEN = [None]
+_GEN_LOCK = threading.Lock()
+
+
+def cpu_generator_for(project, sequence_id):
+    # Kept while the sequence and its size stay the same (decoders warm)
+    _borrow_once()
+    from sequence_preview_gpu import _sequence_size
+    w, h = _sequence_size(project, sequence_id)
+    key = (os.path.abspath(project), int(sequence_id), w, h)
+    with _GEN_LOCK:
+        g = _GEN[0]
+        if g is None or g.closed or g.key != key:
+            if g is not None:
+                g.close()
+            g = CpuComposer(project, sequence_id, w, h)
+            g.key = key
+            _GEN[0] = g
+        return g
+
+
+def cpu_generator_active():
+    return _GEN[0] is not None and not _GEN[0].closed
+
+
+def cpu_generator_release():
+    with _GEN_LOCK:
+        if _GEN[0] is not None:
+            _GEN[0].close()
+            _GEN[0] = None
+
+
+def _borrow_once():
+    if not _borrow_done[0]:
+        _borrow()
+        _borrow_done[0] = True

@@ -2486,7 +2486,13 @@ def open_player_for(timeline):
             return player
         player.show()
         return player
-    player = SequencePlayer(timeline)
+    from cpu_compositor import use_cpu_backend
+    if use_cpu_backend():
+        # No NVIDIA stack (macOS): QImage-painted player
+        from sequence_player_cpu import SequencePlayerCpu
+        player = SequencePlayerCpu(timeline)
+    else:
+        player = SequencePlayer(timeline)
     timeline._player = player
     # Top-level QWindow; only its geometry is set here, before
     # show: under the timeline's menu bar on first open / monitor change /

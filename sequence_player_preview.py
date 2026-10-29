@@ -970,6 +970,13 @@ def _generator_for(project_path, sequence_id):
     # Was: the open player first (headless released), else the
     # headless composer.
     try:
+        from cpu_compositor import use_cpu_backend, cpu_generator_for
+        if use_cpu_backend():
+            return cpu_generator_for(project_path, sequence_id)
+    except Exception as e:
+        print(f"Preview CPU compositor failed: {e}")
+        return None
+    try:
         from sequence_preview_gpu import headless_for
         engine = headless_for(project_path, sequence_id)
     except Exception as e:

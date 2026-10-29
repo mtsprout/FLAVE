@@ -37,6 +37,9 @@ def ensure_cuda(device=0):
     # Create (once) the primary context on device and make it current.
     # Returns the CUcontext pointer (ctypes.c_void_p). Never destroys it.
     global _READY, _DEVICE, _CTX
+    from cpu_compositor import use_cpu_backend
+    if use_cpu_backend():
+        raise RuntimeError("CPU backend: no CUDA")
     with _LOCK:
         if _READY and _CTX.value:
             _ensure_current_locked()
