@@ -448,6 +448,18 @@ def render_length_frames(project_db, sequence_id):
     return int(st.get("frames", 0) or 0)
 
 
+def shift_captions(caps, start, total):
+    # Captions of a marked range: the ones that touch frames start .. start +
+    # total - 1, cut to it and moved so the render's frame 0 is the range start
+    end = int(start) + int(total)
+    out = []
+    for s, length, text in caps:
+        a, b = max(int(s), int(start)), min(int(s) + int(length), end)
+        if b > a:
+            out.append((a - int(start), b - a, text))
+    return out
+
+
 def load_render_captions(project_db, sequence_id):
     # ([(start, length, text)], [languages]) from enabled caption tracks
     import sqlite3
@@ -488,9 +500,11 @@ def sequence_deint_proxies(project_db, sequence_id):
         return {}
 
 
-def mix_mono_pcm(project_db, sequence_id, fps, total_frames):
-    # (pcm bytes, has_audio): the preview mix for the whole range, fresh
-    # (sequence_preview_audio.mix_full_pcm: the preview's full mix path)
+def mix_mono_pcm(project_db, sequence_id, fps, total_frames, start_frame=0):
+    # (pcm bytes, has_audio): the preview mix for total_frames frames from
+    # start_frame, fresh (sequence_preview_audio.mix_full_pcm: the preview's
+    # full mix path); a range is cut from the mix of 0 .. start + total, at
+    # the same frame-to-sample rule the video frames follow
     from sequence_preview_audio import (_load_mix_rows, _track_order,
                                         _load_volume_clips, mix_full_pcm)
     rows = _load_mix_rows(project_db, sequence_id)
@@ -499,7 +513,12 @@ def mix_mono_pcm(project_db, sequence_id, fps, total_frames):
         return b"", False
     order = _track_order(project_db, sequence_id)
     vols = _load_volume_clips(project_db, sequence_id, order)
-    return mix_full_pcm(project_db, rows, fps, total_frames, vols, order), True
+    start = int(start_frame or 0)
+    pcm = mix_full_pcm(project_db, rows, fps, start + int(total_frames), vols, order)
+    if start > 0:
+        from sequence_preview_audio import _frame_to_sample
+        pcm = pcm[2 * _frame_to_sample(start, fps):]     # s16le: 2 bytes a sample
+    return pcm, True
 
 
 # ---------------------------------------------------------------- output size
@@ -707,7 +726,8 @@ class RenderJob(object):
                 pcm, has_audio = p["mono_pcm"], bool(p["mono_pcm"])
             else:
                 pcm, has_audio = mix_mono_pcm(p["project_db"], p["sequence_id"],
-                                              p["fps"], total)
+                                              p["fps"], total,
+                                              int(p.get("start_frame", 0)))
             if has_audio:
                 wav = write_wav(os.path.join(tmp, _base + "_RenderAudio.wav"), pcm, p["stereo"])
             t_audio = time.perf_counter() - t0
@@ -757,7 +777,8 @@ class RenderJob(object):
                 self._progress(0, total, True)
                 try:
                     while f < total and not self.cancelled:
-                        frames = list(range(f, min(total, f + chunk)))
+                        base = int(p.get("start_frame", 0))      # a marked range
+                        frames = [base + i for i in range(f, min(total, f + chunk))]
                         c0 = time.perf_counter()
                         data = self.frame_source(frames)
                         c1 = time.perf_counter()
@@ -919,6 +940,13 @@ def _make_window_class():
                     "The frame is composited at this size: footage keeps its "
                     "detail, but a larger size renders more slowly.")
                 form.addRow("Output Size", self.size_combo)
+            # Range: the whole sequence, or the In to Out marks (marks.py)
+            self.range_combo = QComboBox()
+            self.range_combo.addItem("Entire sequence", None)
+            self.range_combo.addItem("In to Out", "marks")
+            self._range_seen = None
+            if use_cpu_backend():
+                form.addRow("Range", self.range_combo)
             # Hardware (VideoToolbox) or CPU encoder; macOS only
             self.enc_combo = QComboBox()
             if sys.platform == "darwin" and use_cpu_backend():
@@ -1005,6 +1033,39 @@ def _make_window_class():
             self.resize(520, 360)
 
         # ---- render start (GUI thread)
+
+        def refresh_range(self):
+            # The In to Out choice shows the marks; with no mark it is off. A
+            # newly set range is selected; clearing the marks goes back to the
+            # whole sequence.
+            try:
+                import marks
+                tl = self.timeline
+                db = tl._project_db()
+                seen = marks.get(db, self.sequence_id)
+                text = marks.text(tl, db)
+            except Exception:
+                return
+            have = seen != (None, None)
+            self.range_combo.setItemText(
+                1, "In to Out (%s)" % text if have else "In to Out (no In / Out set)")
+            item = self.range_combo.model().item(1)
+            if item is not None:
+                item.setEnabled(have)
+            if seen != self._range_seen:
+                self._range_seen = seen
+                self.range_combo.setCurrentIndex(1 if have else 0)
+
+        def showEvent(self, event):
+            super().showEvent(event)
+            self.refresh_range()
+            try:
+                import marks
+                lst = marks.LISTENERS.setdefault(self.sequence_id, [])
+                if self.refresh_range not in lst:
+                    lst.append(self.refresh_range)
+            except Exception:
+                pass
 
         def refresh_output_path(self):
             # Put the next free version in the Output field (replaces any
@@ -1110,10 +1171,19 @@ def _make_window_class():
             try:
                 project_db = tl._project_db()
                 total = render_length_frames(project_db, self.sequence_id)
+                start = 0
+                if self.range_combo.currentData() == "marks":
+                    import marks
+                    sp = marks.span(project_db, self.sequence_id, total)
+                    if sp is None:
+                        raise ValueError("the In / Out range is empty")
+                    start, total = sp[0], sp[1] - sp[0] + 1
                 caps, langs = ([], [])
                 export_srt = self.srt_check.isChecked()
                 if self.caps_check.isChecked() or export_srt:
                     caps, langs = load_render_captions(project_db, self.sequence_id)
+                    if start or self.range_combo.currentData() == "marks":
+                        caps = shift_captions(caps, start, total)
                 snapshot = timeline_snapshot(
                     tl, use_proxies=False, render_deint=self.deint_check.isChecked())
                 try:
@@ -1135,7 +1205,8 @@ def _make_window_class():
                     "out_path": resolve_output_path(self.out_edit.text(), project_db),
                     "width": getattr(player, "out_w", player.seq_w),
                     "height": getattr(player, "out_h", player.seq_h), "fps": tl.fps,
-                    "total_frames": total, "gop": self.gop_spin.value(),
+                    "total_frames": total, "start_frame": start,
+                    "gop": self.gop_spin.value(),
                     "codec": self.codec_combo.currentText(),
                     "target_mbps": self.target_spin.value(),
                     "burst_mbps": self.burst_spin.value(),
@@ -1283,6 +1354,13 @@ def _make_window_class():
         def closeEvent(self, event):
             # Closing (or New Project) cancels a running render
             self._closing = True
+            try:
+                import marks
+                lst = marks.LISTENERS.get(self.sequence_id, [])
+                if self.refresh_range in lst:
+                    lst.remove(self.refresh_range)
+            except Exception:
+                pass
             if self.job is not None:
                 self.job.cancel()
             if self._pause_wait:

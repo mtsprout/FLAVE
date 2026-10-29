@@ -244,14 +244,33 @@ class Workspace(object):
         self.fade_length_action = self.fade_menu.addAction("Fade Length...")
         self.fade_length_action.triggered.connect(
             lambda: ask_fade_length(pm, self._front_timeline()))
+        # Mark: In and Out points for the render range (marks.py)
+        self.mark_menu = QMenu("Mark", pm)
+        self._mark_actions = []
+        for label, fn in (("Set In\tI", "set_in"), ("Set Out\tO", "set_out"),
+                          ("Go to In\tShift+I", "go_in"), ("Go to Out\tShift+O", "go_out"),
+                          ("Clear In and Out\tAlt+X", "clear")):
+            act = self.mark_menu.addAction(label)
+            act.triggered.connect(lambda checked=False, f=fn: self._mark(f))
+            self._mark_actions.append(act)
+        self.mark_menu.addSeparator()
+        act = self.mark_menu.addAction("Render In to Out...")
+        act.triggered.connect(self._render_front)
+        self._mark_actions.append(act)
         for m in (self.edit_menu, self.footage_menu, self.sequence_menu,
-                  self.fade_menu):
+                  self.fade_menu, self.mark_menu):
             bar.insertMenu(self._anchor, m)
         self.sync_menus()
 
     def _front_timeline(self):
         tl = self.timeline_tabs.currentWidget()
         return tl if tl is not None and hasattr(tl, "sequence_id") else None
+
+    def _mark(self, name):
+        tl = self._front_timeline()
+        if tl is not None:
+            import marks
+            getattr(marks, name)(tl)
 
     def _apply_fade(self, mode):
         tl = self._front_timeline()
@@ -297,6 +316,8 @@ class Workspace(object):
         tl = self._front_timeline()
         self.render_action.setEnabled(tl is not None)
         for act in self._fade_actions:
+            act.setEnabled(tl is not None)
+        for act in self._mark_actions:
             act.setEnabled(tl is not None)
         footage = getattr(pm, "footage_window", None)
         has_footage = footage is not None and pm._alive(footage)

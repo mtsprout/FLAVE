@@ -233,7 +233,10 @@ class NewProjectWindow(QMainWindow):
                 width INTEGER NOT NULL,
                 height INTEGER NOT NULL,
                 fps REAL NOT NULL,
-                preview_size INTEGER
+                preview_size INTEGER,
+                -- In / Out points (marks.py); NULL = not set
+                mark_in INTEGER,
+                mark_out INTEGER
             )
         """)
 

@@ -151,6 +151,12 @@ class TransportBar(QWidget):
         lay = QHBoxLayout(self)
         lay.setContentsMargins(10, 4, 10, 4)
         lay.setSpacing(2)
+        # In / Out marks (marks.py), fixed width so nothing shifts when they appear
+        self.marks_label = QLabel("")
+        self.marks_label.setFixedWidth(250)
+        self.marks_label.setToolTip("In and Out points: I and O set them, Alt+X clears")
+        self.marks_label.setStyleSheet("color: gray; font-size: 11px;")
+        lay.addWidget(self.marks_label)
         self.home = IconButton("home", "Jump to the start (Home)")
         self.prev = IconButton("prev", "Previous edit (Up)")
         self.play = IconButton("play", "Play / Pause (Space)")
@@ -180,11 +186,23 @@ class TransportBar(QWidget):
         for pct in PLAYBACK_SIZE_CHOICES:
             self.size_combo.addItem("Fit" if pct == 100 else "%d%%" % pct, pct)
         self.size_combo.setFocusPolicy(Qt.NoFocus)
+        # wide enough for "75%" in the box and in its pop-up list (the macOS
+        # pop-up is as wide as the box, which clipped the percent sign)
+        self.size_combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
+        self.size_combo.setMinimumWidth(92)
+        self.size_combo.view().setMinimumWidth(92)
         self.size_combo.activated.connect(self._size_chosen)
         lay.addWidget(size_lbl)
         lay.addWidget(self.size_combo)
         lay.addStretch(1)
         self._shown = None
+        self._tick = 0
+        try:
+            import marks
+            marks.LISTENERS.setdefault(int(timeline.sequence_id), []).append(
+                self.refresh_marks)
+        except Exception:
+            pass
         self._timer = QTimer(self)
         self._timer.setInterval(80)
         self._timer.timeout.connect(self.refresh)
@@ -196,6 +214,13 @@ class TransportBar(QWidget):
             getattr(self.timeline, name)()
         except Exception as e:
             print("Transport %s failed: %s" % (name, e))
+
+    def refresh_marks(self):
+        try:
+            import marks
+            self.marks_label.setText(marks.text(self.timeline))
+        except Exception:
+            pass
 
     def _size_chosen(self, index):
         from global_settings import _set_global_setting
@@ -223,6 +248,9 @@ class TransportBar(QWidget):
 
     def refresh(self):
         self._sync_size()
+        self._tick += 1
+        if self._tick % 12 == 1:            # about once a second (also after Undo)
+            self.refresh_marks()
         tl = self.timeline
         try:
             frame, fps = int(tl.current_frame), float(tl.fps)
@@ -255,7 +283,13 @@ def add_step_keys(widget, timeline):
     def call(name):
         return lambda: getattr(timeline, name)()
 
-    keys = (("Left", step(-1)), ("Right", step(1)),
+    import marks
+    keys = (("I", lambda: marks.set_in(timeline)),
+            ("O", lambda: marks.set_out(timeline)),
+            ("Shift+I", lambda: marks.go_in(timeline)),
+            ("Shift+O", lambda: marks.go_out(timeline)),
+            ("Alt+X", lambda: marks.clear(timeline)),
+            ("Left", step(-1)), ("Right", step(1)),
             ("Shift+Left", step(-10)), ("Shift+Right", step(10)),
             ("Up", call("go_prev_edit")), ("Down", call("go_next_edit")),
             ("K", lambda: timeline._on_play_control("Pause")),
