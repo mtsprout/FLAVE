@@ -1587,6 +1587,13 @@ def _clip_context_menu(self, clip, pos):
         scene_action = menu.addAction("Scene Detect (Slice)")
     # Clip speed, whole link stack (clip_speed.py)
     speed_action = menu.addAction("Speed...")
+    # Fades and dissolves for the selected clips (fades.py; unified window)
+    fade_actions = {}
+    import workspace
+    if (workspace.get() is not None and clip[0] > 0
+            and self._track_type(self._clip_track_id(clip)) in ("video", "image", "audio")):
+        from fades import add_fade_submenu
+        fade_actions = add_fade_submenu(menu)
     marker_menu = menu.addMenu("Marker")
     marker_click_action = marker_menu.addAction("Add To Mouse Click")
     marker_tick_action = marker_menu.addAction("Add to Time Tick")
@@ -1624,6 +1631,10 @@ def _clip_context_menu(self, clip, pos):
         return
     if action == ripple_action:
         self.ripple_delete_clips()
+        return
+    if action is not None and action in fade_actions:
+        from fades import apply_fade
+        apply_fade(self, fade_actions[action])
         return
     if action == speed_action:
         from clip_speed import edit_clip_speed

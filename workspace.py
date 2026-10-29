@@ -234,13 +234,34 @@ class Workspace(object):
         self.edit_menu = QMenu("Edit", pm)
         self.footage_menu = QMenu("Footage", pm)
         self.sequence_menu = QMenu("Sequence", pm)
-        for m in (self.edit_menu, self.footage_menu, self.sequence_menu):
+        # Transitions: fades and dissolves for the selected clips (fades.py)
+        from fades import add_fade_items, ask_fade_length
+        self.fade_menu = QMenu("Transitions", pm)
+        self._fade_actions = add_fade_items(self.fade_menu)
+        for act, mode in self._fade_actions.items():
+            act.triggered.connect(lambda checked=False, m=mode: self._apply_fade(m))
+        self.fade_menu.addSeparator()
+        self.fade_length_action = self.fade_menu.addAction("Fade Length...")
+        self.fade_length_action.triggered.connect(
+            lambda: ask_fade_length(pm, self._front_timeline()))
+        for m in (self.edit_menu, self.footage_menu, self.sequence_menu,
+                  self.fade_menu):
             bar.insertMenu(self._anchor, m)
         self.sync_menus()
 
     def _front_timeline(self):
         tl = self.timeline_tabs.currentWidget()
         return tl if tl is not None and hasattr(tl, "sequence_id") else None
+
+    def _apply_fade(self, mode):
+        tl = self._front_timeline()
+        if tl is None:
+            return
+        from fades import apply_fade
+        try:
+            apply_fade(tl, mode)
+        except Exception as e:
+            self.pm.status_bar.showMessage("Fade failed: %s" % e, 6000)
 
     def _import_footage(self):
         win = getattr(self.pm, "footage_window", None)
@@ -275,6 +296,8 @@ class Workspace(object):
         self._ctx = []
         tl = self._front_timeline()
         self.render_action.setEnabled(tl is not None)
+        for act in self._fade_actions:
+            act.setEnabled(tl is not None)
         footage = getattr(pm, "footage_window", None)
         has_footage = footage is not None and pm._alive(footage)
         self.import_action.setEnabled(has_footage)

@@ -30,7 +30,7 @@ First macOS release: FLAVE runs on a Mac with no NVIDIA GPU, in one main
 window (footage and sequences left, player centre, timelines along the
 bottom, Render as a side panel). Preview, playback, thumbnails and export
 (H.264 / H.265, with an Output Size choice) all run on the CPU. New
-oversized footage is dropped scaled to fit, and a drop with no track under
+oversized footage is dropped scaled to fit, fades and cross dissolves are one click (Transitions menu, or Fade in the clip's right-click menu), and a drop with no track under
 it creates the track(s) it needs. Known gaps: proxy generation (NVENC only), screen capture, the title-bar screenshot
 button (off on macOS), and heavy 4K multi-layer timelines are slow. The
 Windows / NVIDIA path is unchanged but was not tested on this branch.
