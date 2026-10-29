@@ -497,6 +497,10 @@ class Workspace(object):
         # (the clips themselves show video / audio / image)
         win.ruler.resizeSection(0, min(win.ruler.sectionSize(0), 120))
         win.ruler.setSectionHidden(1, True)
+        # In / Out marks on the ruler (marks.py)
+        import marks
+        marks.sync(win)
+        marks.LISTENERS.setdefault(sid, []).append(lambda t=win: marks.sync(t))
         # under the tracks: track height slider and the zoom navigator
         win.centralWidget().layout().addWidget(TimelineScaleBar(win))
         st._open_windows[sid] = win

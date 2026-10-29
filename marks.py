@@ -56,6 +56,22 @@ def _store(project_db, sequence_id, a, b):
             pass
 
 
+def sync(tl):
+    # tl._marks = the current (In, Out) for the ruler to draw; repaints it
+    # when they changed. Cheap enough to call about once a second.
+    try:
+        now = get(tl._project_db(), tl.sequence_id)
+    except Exception:
+        return
+    if getattr(tl, "_marks", None) != now:
+        tl._marks = now
+        try:
+            tl.ruler.viewport().update()
+            tl.ruler.update()
+        except Exception:
+            pass
+
+
 def _tc(tl, frame):
     from transport import timecode
     return timecode(frame, tl.fps)

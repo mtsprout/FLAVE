@@ -218,6 +218,7 @@ class TransportBar(QWidget):
     def refresh_marks(self):
         try:
             import marks
+            marks.sync(self.timeline)          # the ruler marks follow (Undo too)
             self.marks_label.setText(marks.text(self.timeline))
         except Exception:
             pass

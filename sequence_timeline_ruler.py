@@ -49,6 +49,55 @@ class RulerHeader(QHeaderView):
         self._edge_timer.setInterval(SCRUB_TICK_MS)
         self._edge_timer.timeout.connect(self._edge_tick)
 
+    def _paint_head(self, painter, sx, top, color):
+        from PySide6.QtCore import QPointF
+        from PySide6.QtGui import QPolygonF
+        half = HEAD_W / 2.0
+        poly = QPolygonF([QPointF(sx - half, top), QPointF(sx + half + 1, top),
+                          QPointF(sx + half + 1, top + HEAD_H * 0.55),
+                          QPointF(sx + 0.5, top + HEAD_H),
+                          QPointF(sx - half, top + HEAD_H * 0.55)])
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setPen(QPen(QColor(150, 30, 30), 1))
+        painter.setBrush(color)
+        painter.drawPolygon(poly)
+        painter.restore()
+
+    def _paint_marks(self, painter, rect, left, start, ppf, total):
+        # In / Out marks (marks.py) at the top edge of the ruler: a bracket
+        # at each mark and a bar between them (the range to be rendered).
+        # Only In: the bar runs to the end of the sequence; only Out: from
+        # frame 0. Unified window only.
+        import workspace
+        if workspace.get() is None:
+            return
+        a, b = getattr(self.timeline, "_marks", (None, None)) or (None, None)
+        if a is None and b is None:
+            return
+        try:
+            import theme
+            accent = QColor((theme.DARK if theme.is_dark() else theme.LIGHT)["accent"])
+        except Exception:
+            accent = QColor(76, 154, 255)
+        top = rect.top()
+        x_in = int(left + ((0 if a is None else a) - start) * ppf)
+        x_out = int(left + (((total if b is None else b + 1)) - start) * ppf)
+        bar = QColor(accent)
+        bar.setAlpha(230 if (a is not None and b is not None) else 120)
+        lo, hi = max(rect.left(), x_in), min(rect.right(), x_out)
+        if hi > lo:
+            painter.fillRect(lo, top, hi - lo, 4, bar)
+        painter.fillRect  # (keep the painter state simple)
+        if a is not None and rect.left() <= x_in <= rect.right():
+            painter.fillRect(x_in, top, 2, 15, accent)          # [
+            painter.fillRect(x_in, top, 8, 2, accent)
+            painter.fillRect(x_in, top + 13, 8, 2, accent)
+        if b is not None and rect.left() <= x_out <= rect.right() + 1:
+            painter.fillRect(x_out - 2, top, 2, 15, accent)     # ]
+            painter.fillRect(x_out - 8, top, 8, 2, accent)
+            painter.fillRect(x_out - 8, top + 13, 8, 2, accent)
+
     def paintSection(self, painter, rect, logical_index):
         if logical_index != CLIPS_COL:
             super().paintSection(painter, rect, logical_index)
@@ -116,6 +165,7 @@ class RulerHeader(QHeaderView):
                 text_x = x - fm.horizontalAdvance(text) // 2
                 painter.drawText(text_x, text_y, text)
                 sec += interval
+        self._paint_marks(painter, rect, left, start, ppf, total)
         # Preview cache bar under the ruler: red = missing or dirty,
         # green = clean row in {ProjectName}_{sequence_id}_Preview.db. One range query.
         # The video bar sits right above the audio bar
@@ -188,8 +238,14 @@ class RulerHeader(QHeaderView):
             red = QColor(255, 80, 80)
             top = rect.top()
             painter.fillRect(sx, top, 1, rect.height(), red)
-            painter.fillRect(sx - 1, top, 1, outer_h, red)
-            painter.fillRect(sx + 1, top, 1, outer_h, red)
+            import workspace
+            if workspace.get() is not None:
+                # A handle you can grab (unified window): a filled marker
+                # at the top of the ruler, HEAD_W x HEAD_H
+                self._paint_head(painter, sx, top, red)
+            else:
+                painter.fillRect(sx - 1, top, 1, outer_h, red)
+                painter.fillRect(sx + 1, top, 1, outer_h, red)
         # Snap line (white, playhead center-line style) while a drag snaps
         snap = getattr(tl, "_snap_frame", None)
         if snap is not None:
@@ -217,6 +273,8 @@ class RulerHeader(QHeaderView):
             self._scrub_x = None
             self._scrub_rem = 0.0
             self._scrub_panned = False
+            self._grab_dx = self._head_offset(x, int(event.position().y()))
+            x -= self._grab_dx
             # A scrubber press while playback is running stops
             # it before the seek, so the move stays on the stopped path
             tl = self.timeline
@@ -230,10 +288,22 @@ class RulerHeader(QHeaderView):
             return
         super().mousePressEvent(event)
 
+    def _head_offset(self, x, y):
+        # A press on the playhead handle: how far from its centre, so the drag
+        # carries the playhead instead of jumping it to the click (0 anywhere
+        # else on the ruler, where a click still jumps)
+        import workspace
+        if workspace.get() is None or y > HEAD_H + 2:
+            return 0
+        tl = self.timeline
+        sx = int(self.sectionViewportPosition(CLIPS_COL)
+                 + (tl.current_frame - tl.view_start_frame) * tl.pixels_per_frame)
+        return x - sx if abs(x - sx) <= HEAD_GRAB_X else 0
+
     def mouseMoveEvent(self, event):
         if self._dragging:
             # Outside the widget too (the press grabs the mouse)
-            self._edge_scrub(int(event.position().x()))
+            self._edge_scrub(int(event.position().x()) - getattr(self, "_grab_dx", 0))
             return
         super().mouseMoveEvent(event)
 
@@ -424,6 +494,11 @@ def ruler_label_text(seconds):
 
 # Half width (px) of the strip invalidated around a moved 1 px line
 PLAYHEAD_STRIP_PAD = 2
+# The playhead handle in the ruler (unified window): size in px, and the
+# grab zone around it (a press inside picks it up without moving it)
+HEAD_W = 15
+HEAD_H = 15
+HEAD_GRAB_X = 9
 
 
 class PlayheadOverlay(QWidget):
