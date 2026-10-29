@@ -144,7 +144,8 @@ class ProjectManager(QMainWindow):
         import workspace
         self.workspace = workspace.install(self) if workspace.enabled() else None
         if self.workspace is not None:
-            self.setWindowTitle("FLAVE")
+            from version import VERSION
+            self.setWindowTitle("FLAVE %s" % VERSION)
             self.resize(1500, 950)
             self._add_workspace_menu_items()
         self._restore_geometry()
@@ -596,7 +597,8 @@ def print_build():
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "counter.txt")
     try:
         with open(path, "r") as f:
-            print(f"BUILD {int(f.read().strip())}")
+            from version import VERSION
+            print(f"FLAVE {VERSION} BUILD {int(f.read().strip())}")
     except FileNotFoundError:
         print("BUILD missing")
 

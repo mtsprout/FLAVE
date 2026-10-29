@@ -24,6 +24,18 @@ Find me: [X / FilmLadd](https://x.com/FilmLadd) · [YouTube](https://www.youtube
 with attribution; see [LICENSE](LICENSE). The software itself may not
 be sold.
 
+## Version 0.1.0-alpha (macOS)
+
+First macOS release: FLAVE runs on a Mac with no NVIDIA GPU, in one main
+window (footage and sequences left, player centre, timelines along the
+bottom, Render as a side panel). Preview, playback, thumbnails and export
+(H.264 / H.265, with an Output Size choice) all run on the CPU. New
+oversized footage is dropped scaled to fit, and a drop with no track under
+it creates the track(s) it needs. Known gaps: the border outline effect,
+proxy generation (NVENC only), screen capture, the title-bar screenshot
+button (off on macOS), and heavy 4K multi-layer timelines are slow. The
+Windows / NVIDIA path is unchanged but was not tested on this branch.
+
 ## macOS / no NVIDIA (CPU backend)
 
 On macOS, or with `FLAVE_BACKEND=cpu`, FLAVE skips CUDA, NVDEC, nvJPEG
