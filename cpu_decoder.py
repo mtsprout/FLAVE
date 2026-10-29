@@ -196,6 +196,31 @@ def _probe_size(path):
     return w, h
 
 
+def _probe_cfr_fps(path):
+    # Frames per second of stream V:0 when the file is constant frame rate
+    # (r_frame_rate == avg_frame_rate), else None. Only then is frame n at
+    # time n / fps, so a long seek can use input seeking (-ss) instead of
+    # decoding every frame from the start.
+    cmd = ["ffprobe", "-v", "error", "-select_streams", "V:0",
+           "-show_entries", "stream=r_frame_rate,avg_frame_rate",
+           "-of", "csv=p=0", path]
+    try:
+        result = subprocess.run(cmd, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, timeout=20)
+        parts = result.stdout.decode("ascii", "replace").strip().split(",")
+        if result.returncode != 0 or len(parts) < 2 or parts[0] != parts[1]:
+            return None
+        num, _, den = parts[0].partition("/")
+        fps = float(num) / float(den or 1)
+        return fps if 1.0 <= fps <= 240.0 else None
+    except (OSError, subprocess.TimeoutExpired, ValueError, ZeroDivisionError):
+        return None
+
+
+# Seeks to an index below this keep the exact decode-through filter
+FAST_SEEK_MIN = 90
+
+
 def _drain_stderr(proc, chunks):
     # Read stderr on the side so a chatty ffmpeg cannot fill the pipe and
     # stall the frame read.
@@ -248,6 +273,7 @@ class CpuDecoder(object):
         self.height = 0
         self.stride = 0
         self.nbytes = 0
+        self._fps = None
         try:
             self._open()
         except Exception:
@@ -261,6 +287,8 @@ class CpuDecoder(object):
         if not size:
             raise footage_decode_error(self.path, "ffprobe found no video stream")
         self.width, self.height = size
+        if sys.platform == "darwin" or os.environ.get("FLAVE_FAST_SEEK"):
+            self._fps = _probe_cfr_fps(self.path)
         self.stride = self.width * 3
         self.nbytes = self.stride * self.height
         if self.nbytes <= 0:
@@ -273,8 +301,13 @@ class CpuDecoder(object):
         self._primed = raw
 
     def _ffmpeg_cmd(self, index):
-        cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin",
-               "-i", self.path, "-map", "0:V:0", "-an", "-sn", "-dn"]
+        cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin"]
+        if self._fps and index >= FAST_SEEK_MIN:
+            # Input seek to half a frame before index: the first frame out
+            # is index (constant frame rate)
+            cmd += ["-ss", "%.6f" % ((index - 0.5) / self._fps)]
+            index = 0
+        cmd += ["-i", self.path, "-map", "0:V:0", "-an", "-sn", "-dn"]
         if index > 0:
             # Frame-accurate: n is the decoded frame index. Frames before
             # index are dropped inside ffmpeg; the pipe then yields index,

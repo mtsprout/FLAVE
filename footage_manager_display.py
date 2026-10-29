@@ -549,6 +549,9 @@ def _video_frame_full_impl(path, frame_number=0):
     # file, then cudaMemcpy device-to-host, no scaling. Returns None if
     # cudart is missing or the grab fails.
     frame_number = max(0, int(frame_number or 0))
+    from cpu_compositor import use_cpu_backend
+    if use_cpu_backend():
+        return _video_frame_full_cpu(path, frame_number)
     cudart = _load_cudart()
     if cudart is None:
         # print("ICON: grab failed: cudart not found")
@@ -601,6 +604,35 @@ def _video_frame_full_impl(path, frame_number=0):
         return None if pix.isNull() else pix
     except Exception as e:
         # print(f"ICON: grab failed: {type(e).__name__}: {e}")
+        return None
+
+
+_cpu_decoders = {}     # path -> (file stamp, CpuDecoder, {slot: raw bytes})
+
+
+def _video_frame_full_cpu(path, frame_number):
+    # No CUDA (macOS): the same grab through the ffmpeg CpuDecoder
+    try:
+        key = os.path.normcase(os.path.abspath(path))
+        st = os.stat(path)
+        stamp = (st.st_mtime, st.st_size)
+        entry = _cpu_decoders.get(key)
+        if entry is None or entry[0] != stamp:
+            from cpu_decoder import CpuDecoder
+            store = {}
+            entry = (stamp, CpuDecoder(
+                path, upload=lambda raw, slot: store.__setitem__(slot, raw) or slot),
+                store)
+            _cpu_decoders[key] = entry
+        dec, store = entry[1], entry[2]
+        dec.seek_to_index(frame_number)
+        if not dec.get_batch_frames(1):
+            return None
+        image = QImage(store[0], dec.width, dec.height, dec.width * 3,
+                       QImage.Format_RGB888).copy()
+        pix = QPixmap.fromImage(image)
+        return None if pix.isNull() else pix
+    except Exception:
         return None
 
 
