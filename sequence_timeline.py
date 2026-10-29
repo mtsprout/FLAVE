@@ -38,7 +38,7 @@ from sequence_timeline_sql import (
     sequence_exists, _load_sequence_name,
     _latest_clip_end, sequence_length_seconds, _load_sequence_fps,
     _add_track, refresh, _save_track_display, _move_track, _move_track_to,
-    _toggle_track_flag, drop_footage, _range_overlaps, delete_selected_clip,
+    _toggle_track_flag, drop_footage, drop_files, _range_overlaps, delete_selected_clip,
     drop_sequence, sequence_id_from_mime, delete_track,
     slice_clip, ripple_delete, _toggle_clip_flag,
     ripple_delete_clips, ripple_gap,
@@ -192,6 +192,7 @@ class SequenceTimeline(QMainWindow):
     _move_track_to = _move_track_to   # Move > To Top / To Bottom
     _toggle_track_flag = _toggle_track_flag
     drop_footage = drop_footage
+    drop_files = drop_files
     drop_sequence = drop_sequence
     delete_track = delete_track
     _range_overlaps = _range_overlaps
@@ -1055,6 +1056,15 @@ class SequenceTimeline(QMainWindow):
             event.accept()
             self.drop_sequence(child_id, row, x_in_clips)
             return
+        from footage_drop import media_paths
+        paths = media_paths(event.mimeData())
+        if paths:
+            # Files from Finder: imported into the project (Footage pane
+            # too), then placed from the drop point
+            event.setDropAction(Qt.CopyAction)
+            event.accept()
+            self.drop_files(paths, row, x_in_clips)
+            return
         footage_id = self._footage_id_from_mime(event.mimeData())
         if footage_id is None:
             event.ignore()
@@ -1312,9 +1322,16 @@ class SequenceTimeline(QMainWindow):
                 self.wheel_pan(event)
                 return True
             if etype in (QEvent.DragEnter, QEvent.DragMove):
+                from footage_drop import media_paths
                 # Footage drop preview (sequence drops: none)
                 from sequence_timeline_droppreview import drag_enter, drag_move, drag_end
                 if sequence_id_from_mime(event.mimeData()) is not None:
+                    drag_end(self)
+                    event.setDropAction(Qt.CopyAction)
+                    event.accept()
+                elif media_paths(event.mimeData()):
+                    # Files from Finder: no preview box (they are not in the
+                    # project yet), the drop imports and places them
                     drag_end(self)
                     event.setDropAction(Qt.CopyAction)
                     event.accept()

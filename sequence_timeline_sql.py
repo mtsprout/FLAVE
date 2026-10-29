@@ -529,6 +529,57 @@ def _toggle_track_flag(self, track_id, column):
     self._after_track_change()
 
 
+def drop_files(self, paths, row, x_in_clips):
+    # Files dropped from Finder: each is imported into the project (and so
+    # appears in the Footage pane), then placed like a dropped footage item.
+    # Several files go one after another from the drop point, on the track
+    # the first one landed on.
+    from footage_drop import import_paths, refresh_footage_panes
+    project_db = self._project_db()
+    if not project_db or not os.path.isfile(project_db):
+        return False
+    pairs = import_paths(project_db, paths)
+    if not pairs:
+        self.status_bar.showMessage("Could not import the dropped files", 4000)
+        return False
+    refresh_footage_panes()
+    placed = 0
+    x = x_in_clips
+    for _path, footage_id in pairs:
+        conn = sqlite3.connect(project_db)
+        try:
+            before = conn.execute("SELECT COALESCE(MAX(id), 0) FROM clips").fetchone()[0]
+        finally:
+            conn.close()
+        ok = self.drop_footage(footage_id, row, x)
+        if not ok and row >= 0:
+            ok = self.drop_footage(footage_id, -1, x)       # another kind of track
+        if not ok:
+            continue
+        placed += 1
+        # the next file starts where this one ends, on the same track
+        conn = sqlite3.connect(project_db)
+        try:
+            first = conn.execute(
+                "SELECT track_id, start_frame, length_frames FROM clips "
+                "WHERE id > ? ORDER BY id LIMIT 1", (before,)).fetchone()
+        finally:
+            conn.close()
+        if first:
+            track_id, start, length = first
+            x = ((start + length - self.view_start_frame) * self.pixels_per_frame
+                 + self.pixels_per_frame * 0.5)
+            row = -1
+            for r in range(self.table.rowCount()):
+                it = self.table.item(r, 0)
+                if it is not None and it.data(Qt.UserRole) == track_id:
+                    row = r
+                    break
+    self.status_bar.showMessage(
+        "Imported %d file(s), added %d clip(s)" % (len(pairs), placed), 4000)
+    return placed > 0
+
+
 def _footage_track_type(frow):
     # The track type (video, audio or image) a footage row (filename,
     # original_path) belongs on, from its extension; None if it has none

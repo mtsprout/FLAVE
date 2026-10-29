@@ -382,6 +382,28 @@ class PlayerPanel(QWidget):
         self.setMinimumSize(200, 120)
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.ClickFocus)
+        self.setAcceptDrops(True)       # files / footage: added at the playhead
+        self.on_drop = None             # set by the workspace
+
+    def dragEnterEvent(self, event):
+        from footage_drop import media_paths
+        mime = event.mimeData()
+        if media_paths(mime) or (mime.hasText() and mime.text().startswith("footage:")):
+            event.setDropAction(Qt.CopyAction)
+            event.accept()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        self.dragEnterEvent(event)
+
+    def dropEvent(self, event):
+        if self.on_drop is None:
+            event.ignore()
+            return
+        event.setDropAction(Qt.CopyAction)
+        event.accept()
+        self.on_drop(event.mimeData())
 
     def set_logic(self, logic):
         self.logic = logic

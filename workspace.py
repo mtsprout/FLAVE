@@ -467,6 +467,7 @@ class Workspace(object):
             lay = QVBoxLayout(page)
             lay.setContentsMargins(0, 0, 0, 0)
             lay.setSpacing(0)
+            panel.on_drop = lambda mime, t=timeline: self._player_drop(t, mime)
             lay.addWidget(panel, 1)
             lay.addWidget(TransportBar(timeline))
             add_step_keys(page, timeline)
@@ -482,6 +483,39 @@ class Workspace(object):
         if self.timeline_tabs.currentWidget() is timeline:
             self.stack.setCurrentWidget(self.pages[sid])
         return player
+
+    def _player_drop(self, timeline, mime):
+        # Files from Finder or a Footage item dropped on the picture: added
+        # at the playhead (several files one after another)
+        from footage_drop import import_paths, media_paths, refresh_footage_panes
+        ids = []
+        paths = media_paths(mime)
+        if paths:
+            ids = [fid for _p, fid in import_paths(timeline._project_db(), paths)]
+            refresh_footage_panes()
+        elif mime.hasText() and mime.text().startswith("footage:"):
+            val = mime.text()[len("footage:"):].strip()
+            if val.isdigit():
+                ids = [int(val)]
+        start = int(timeline.current_frame)
+        import sqlite3
+        for fid in ids:
+            conn = sqlite3.connect(timeline._project_db())
+            try:
+                before = conn.execute("SELECT COALESCE(MAX(id), 0) FROM clips").fetchone()[0]
+            finally:
+                conn.close()
+            self.add_footage_at_playhead(fid)
+            conn = sqlite3.connect(timeline._project_db())
+            try:
+                new = conn.execute(
+                    "SELECT start_frame + length_frames FROM clips WHERE id > ? "
+                    "ORDER BY id LIMIT 1", (before,)).fetchone()
+            finally:
+                conn.close()
+            if new:
+                timeline.set_current_frame(int(new[0]))   # the next one follows
+        timeline.set_current_frame(start)
 
     # ---- render managers
     def open_render(self, timeline):

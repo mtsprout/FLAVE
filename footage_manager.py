@@ -153,6 +153,30 @@ class FootageTable(QTableWidget):
         self.manager = manager
         self.setDragEnabled(True)
         self.setDragDropMode(QTableWidget.DragOnly)
+        # ... and takes files dropped from Finder (footage_drop.py)
+        self.setAcceptDrops(True)
+        self.viewport().setAcceptDrops(True)
+
+    def dragEnterEvent(self, event):
+        from footage_drop import media_paths
+        if media_paths(event.mimeData()):
+            event.setDropAction(Qt.CopyAction)
+            event.accept()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        self.dragEnterEvent(event)
+
+    def dropEvent(self, event):
+        from footage_drop import media_paths
+        paths = media_paths(event.mimeData())
+        if not paths:
+            event.ignore()
+            return
+        event.setDropAction(Qt.CopyAction)
+        event.accept()
+        self.manager.import_dropped(paths)
 
     def startDrag(self, supported_actions):
         row = self.currentRow()
@@ -290,6 +314,24 @@ class FootageManager(QMainWindow):
     def _slug_color_fill(self):
         from footage_slug import color_fill
         color_fill(self)
+
+    def import_dropped(self, paths):
+        # Files dropped from Finder: imported (an item from the same path is
+        # reused)
+        if not self.project_db:
+            QMessageBox.warning(self, "Import", "No project open")
+            return
+        from footage_drop import import_paths
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            pairs = import_paths(self.project_db, paths)
+        finally:
+            QApplication.restoreOverrideCursor()
+        if pairs:
+            self.status_bar.showMessage("Imported %d file(s)" % len(pairs))
+            self.refresh()
+        else:
+            QMessageBox.warning(self, "Import", "Could not import the dropped files")
 
     def _import_footage(self):
         if not self.project_db:
