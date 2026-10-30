@@ -268,6 +268,7 @@ class ProjectManager(QMainWindow):
         if self.workspace is not None and self.current_project:
             self._open_footage_manager()
             self._open_sequence_manager()
+            self.workspace.ensure_default_areas()
 
     def _undo_redo(self, which):
         if not self.current_project:

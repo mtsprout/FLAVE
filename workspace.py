@@ -149,6 +149,64 @@ class _LongPress(QObject):
             self.handler(row)
 
 
+class EmptyPlayer(QWidget):
+    # The centre while no timeline is open: the player's own surround with an
+    # empty picture frame and a hint, so a blank project looks like one in
+    # progress (no project path shown)
+
+    def paintEvent(self, event):
+        from PySide6.QtCore import QRectF
+        from PySide6.QtGui import QColor, QPainter
+        import theme
+        dark = theme.is_dark()
+        p = QPainter(self)
+        p.fillRect(self.rect(), QColor(28, 28, 28) if dark else QColor(214, 214, 214))
+        margin = 8.0
+        ww, wh = self.width() - 2 * margin, self.height() - 2 * margin
+        if ww > 32 and wh > 32:
+            aspect = 16.0 / 9.0
+            w, h = (ww, ww / aspect) if ww / wh < aspect else (wh * aspect, wh)
+            r = QRectF(margin + (ww - w) / 2.0, margin + (wh - h) / 2.0, w, h)
+            p.fillRect(r, QColor(14, 14, 14) if dark else QColor(236, 236, 236))
+            p.setPen(QColor(110, 110, 110) if dark else QColor(150, 150, 150))
+            p.drawRect(r.adjusted(-0.5, -0.5, 0.5, 0.5))
+            p.setPen(QColor(154, 154, 162) if dark else QColor(110, 110, 118))
+            p.drawText(r, Qt.AlignCenter, "Double-click a sequence to open it here")
+        p.end()
+
+
+class TimelineTabs(QTabWidget):
+    # The timeline tabs, with a hint over the empty area while none is open
+
+    HINT = ("No timeline open.\nDouble-click a sequence, or use Sequence > "
+            "Add New Sequence.")
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._hint = QLabel(self.HINT, self)
+        self._hint.setAlignment(Qt.AlignCenter)
+        self._hint.setStyleSheet("color: gray; background: transparent;")
+        self._hint.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self._place_hint()
+
+    def _place_hint(self):
+        self._hint.setGeometry(0, 0, self.width(), self.height())
+        self._hint.setVisible(self.count() == 0)
+        self._hint.raise_()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._place_hint()
+
+    def tabInserted(self, index):
+        super().tabInserted(index)
+        self._place_hint()
+
+    def tabRemoved(self, index):
+        super().tabRemoved(index)
+        self._place_hint()
+
+
 def _placeholder(text):
     label = QLabel(text)
     label.setAlignment(Qt.AlignCenter)
@@ -170,8 +228,8 @@ class Workspace(object):
         # centre: the player of the current timeline, else the old status
         # label (project path / "No project open")
         self.stack = QStackedWidget()
-        status = pm.takeCentralWidget()
-        self.stack.addWidget(status)
+        self._status_label = pm.takeCentralWidget()     # kept, never shown
+        self.stack.addWidget(EmptyPlayer())
         pm.setCentralWidget(self.stack)
 
         self.footage_dock = self._dock("footage", "Footage", Qt.LeftDockWidgetArea,
@@ -183,7 +241,7 @@ class Workspace(object):
         slim_title(self.sequence_dock, "Sequences")
         pm.splitDockWidget(self.footage_dock, self.sequence_dock, Qt.Vertical)
 
-        self.timeline_tabs = QTabWidget()
+        self.timeline_tabs = TimelineTabs()
         self.timeline_tabs.setDocumentMode(True)
         self.timeline_tabs.tabCloseRequested.connect(self._close_timeline_tab)
         self.timeline_tabs.currentChanged.connect(self._timeline_tab_changed)
@@ -496,6 +554,23 @@ class Workspace(object):
         for r in rows + [-1]:
             if tl.drop_footage(int(footage_id), r, x):
                 return
+
+    def ensure_default_areas(self):
+        # A project is open: the timeline area is shown and tall enough, and
+        # the left column is a sensible width, whatever layout was saved
+        pm = self.pm
+        self.show_dock(self.timeline_dock)
+        self.show_dock(self.footage_dock)
+        self.show_dock(self.sequence_dock)
+
+        def fix():
+            if self.timeline_dock.height() < 200:
+                pm.resizeDocks([self.timeline_dock], [max(260, int(pm.height() * 0.4))],
+                               Qt.Vertical)
+            if self.footage_dock.width() < 280:
+                pm.resizeDocks([self.footage_dock], [max(380, int(pm.width() * 0.28))],
+                               Qt.Horizontal)
+        QTimer.singleShot(0, fix)
 
     def show_dock(self, dock):
         dock.show()
