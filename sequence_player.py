@@ -672,6 +672,10 @@ def timeline_snapshot(tl, use_proxies=True, render_deint=False):
     if any(r[3] == "text" for r in rows):
         from text_clip import load_text_styles
         text_styles = load_text_styles(project_db, getattr(tl, "sequence_id", None))
+    # Blur and drop shadow keyframe clips (snapshot[35], [36]); CPU backend
+    from keyframe import collect_blur_clips, collect_shadow_clips
+    blur_clips = collect_blur_clips(tl.clips_by_track, track_order)
+    shadow_clips = collect_shadow_clips(tl.clips_by_track, track_order)
     return (rows, clips, scale_clips, pos_x_clips, track_order, pos_y_clips,
             proxies, opacity_clips, crop_x_clips, crop_y_clips,
             gamma_clips, brightness_clips, contrast_clips, rotate_clips,
@@ -679,7 +683,8 @@ def timeline_snapshot(tl, use_proxies=True, render_deint=False):
                 fps_conform, move_x_clips, move_y_clips,
                 crop_xy_x_clips, crop_xy_y_clips) + tuple(crop_edge_clips) + (
                 clip_speeds, text_styles) + tuple(chroma_clips) + (
-                    dict(getattr(tl, "_clip_fits", None) or {}),)
+                    dict(getattr(tl, "_clip_fits", None) or {}),
+                    blur_clips, shadow_clips)
 
 
 def _chroma_key_rows(chroma):
@@ -1241,6 +1246,9 @@ class SequencePlayer(QWindow):
         from player_text import text_layer_path
         # Fit scale by clip id (snapshot[34], clip_fit.py): the base scale
         fits = snapshot[34] if len(snapshot) > 34 else {}
+        # Blur / drop shadow (snapshot[35], [36]): layer items [19], [20]
+        blur_clips = snapshot[35] if len(snapshot) > 35 else []
+        shadow_clips = snapshot[36] if len(snapshot) > 36 else []
         from keyframe import color_value_for_link
         from keyframe import crop_offset_for_link
         from keyframe import opacity_for_link
@@ -1328,12 +1336,17 @@ class SequencePlayer(QWindow):
                     outline = outline_for_link(
                         outline_clips, outline_rgba_clips, link_id, frame,
                         clip_order)
+                    blur = (color_value_for_link(blur_clips, link_id, frame, clip_order)
+                            if blur_clips else None)
+                    shadow = (color_value_for_link(shadow_clips, link_id, frame,
+                                                   clip_order)
+                              if shadow_clips else None)
                     layers.append((kind, path, max(0, int(src)), scale, pos_dx,
                                    pos_dy, (clip[0], path), orig_size, opacity,
                                    crop_x, crop_y, gamma, brightness, contrast,
                                    rotate, outline,
                                    instances.get(clip[0], (0, path)),
-                                   crop_edges, chroma))
+                                   crop_edges, chroma, blur, shadow))
                 break
         return layers
 

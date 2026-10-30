@@ -66,12 +66,26 @@ def blend_layer(dst, src, scale=None, pos_dx=None, pos_dy=None,
                 orig_size=None, opacity=None, crop_x=None, crop_y=None,
                 gamma=None, brightness=None, contrast=None, rotate=None,
                 outline=None, crop_edges=None, chroma=None,
-                k_pos=1.0, k_scale=1.0):
+                k_pos=1.0, k_scale=1.0, blur=None, shadow=None):
     # dst: uint8 (H, W, 3), blended in place. src: uint8 (h, w, 3 or 4).
     # Arguments are those of SequencePlayer._blend. k_pos / k_scale: dst is
     # k times the sequence size (render Output Size): positions grow by
     # k_pos, a source in its own pixels is scaled by k_scale (1 for a source
     # already made at the output size, such as a text image).
+    blur_px = _num(blur, 0.0, 0.0, 1.0e4) * k_pos
+    shadow_pct = _num(shadow, 0.0, 0.0, 100.0)
+    if blur_px > 0.0 or shadow_pct > 0.0:
+        # blur / drop shadow: the layer is drawn on its own and processed
+        # (cpu_effects.py), then composited
+        import cpu_effects
+        plain = dict(scale=scale, pos_dx=pos_dx, pos_dy=pos_dy, orig_size=orig_size,
+                     opacity=opacity, crop_x=crop_x, crop_y=crop_y, gamma=gamma,
+                     brightness=brightness, contrast=contrast, rotate=rotate,
+                     outline=outline, crop_edges=crop_edges, chroma=chroma,
+                     k_pos=k_pos, k_scale=k_scale)
+        cpu_effects.apply(dst, lambda canvas: blend_layer(canvas, src, **plain),
+                          blur_px, shadow_pct)
+        return
     H, W = dst.shape[:2]
     sh, sw = src.shape[:2]
     factor = 1.0
@@ -440,7 +454,7 @@ class CpuComposer(object):
                         orig_size=g(7), opacity=g(8), crop_x=g(9),
                         crop_y=g(10), gamma=g(11), brightness=g(12),
                         contrast=g(13), rotate=g(14), outline=g(15),
-                        crop_edges=g(17), chroma=g(18))
+                        crop_edges=g(17), chroma=g(18), blur=g(19), shadow=g(20))
         return canvas
 
     def frames_rgb(self, frames, snapshot):

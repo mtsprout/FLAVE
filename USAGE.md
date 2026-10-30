@@ -84,6 +84,7 @@ The menu bar changes with what is in front. The menus you will use most:
 | Tracks | Add a video, audio, image, caption, keyframe or text track |
 | Transitions | Fades, Cross Dissolve, Fade Length |
 | Motion | Slide, Pop, Zoom and Shake presets, Motion Options |
+| Effects | Drop Shadow, Blur, Focus In, Focus Out, Remove Blur and Shadow |
 | Text | Add Title, Add Lower Third, Reveal Selected Text, Typing Speed |
 | Mark | In and Out points, and Render In to Out |
 | Preview | Refresh, Clear Video, Clear Audio |
@@ -304,6 +305,29 @@ single undo step, so you can open and tweak the keys afterward.
 easing (ease out, ease in, ease in and out, overshoot, or linear). Applying a
 second preset to the same clip adds to its keys. If two presets overlap, the
 newer one replaces the keys in the overlap.
+
+## 10b. Effects: blur and drop shadow
+
+The **Effects** menu (and a clip's right-click > **Effects**) adds a look to the
+selected video, image or text clips. Like the fades and motion presets, each effect
+is made of ordinary keyframes on a keyframe track above the clip, in one undo step.
+
+| Effect | What it does |
+|---|---|
+| Drop Shadow | A soft shadow behind the clip, down and to the right, for the whole clip |
+| Blur... | A constant blur. You type the radius in sequence pixels (20 is a good start) |
+| Focus In | The clip starts blurred and sharpens over the motion length |
+| Focus Out | The clip is sharp, then blurs at its end |
+| Remove Blur and Shadow | Deletes the blur and shadow keys of the selected clips |
+
+Blur and Drop Shadow are also keyframe types ("Blur" and "Drop Shadow") in the
+keyframe dialog, so you can animate them yourself: blur is a radius (0 is none),
+and the shadow is a strength from 0 to 100. The shadow's offset and softness are
+fixed and scale with the frame height. A shadow follows the shape of the layer, so
+it shows best on text and on clips scaled smaller than the frame.
+
+Effects take extra time on the frames where they show (roughly a tenth of a second
+per effect at 1080p), so previews and renders of effect-heavy sections are slower.
 
 ## 11. Keyframes
 

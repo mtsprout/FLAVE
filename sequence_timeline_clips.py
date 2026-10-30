@@ -1600,6 +1600,12 @@ def _clip_context_menu(self, clip, pos):
             and self._track_type(self._clip_track_id(clip)) in ("video", "image", "text")):
         from motion import add_motion_submenu
         motion_actions = add_motion_submenu(menu)
+    # Effects: drop shadow / blur / focus for video, image and text clips
+    effect_actions = {}
+    if (workspace.get() is not None
+            and self._track_type(self._clip_track_id(clip)) in ("video", "image", "text")):
+        from effects import add_effect_items
+        effect_actions = add_effect_items(menu.addMenu("Effects"))
     # Text reveals for text clips (text_anim.py)
     reveal_actions = {}
     if workspace.get() is not None and self._track_type(self._clip_track_id(clip)) == "text":
@@ -1646,6 +1652,10 @@ def _clip_context_menu(self, clip, pos):
     if action is not None and action in fade_actions:
         from fades import apply_fade
         apply_fade(self, fade_actions[action])
+        return
+    if action is not None and action in effect_actions:
+        from effects import apply_effect
+        apply_effect(self, effect_actions[action], self)
         return
     if action is not None and action in reveal_actions:
         from text_anim import apply_reveal

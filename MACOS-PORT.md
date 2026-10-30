@@ -147,6 +147,12 @@ None of these exist in the original.
 - Drop preview (`sequence_timeline_droppreview.py`, extended): ghost boxes also
   for Finder drags (probed with ffprobe), dashed boxes for tracks the drop will
   create, red boxes where it would be refused, and a timecode label.
+- Effects (`effects.py`, `cpu_effects.py`): Drop Shadow, Blur, Focus In / Out and
+  Remove, from the Effects menu or the clip right-click menu. They are two new
+  keyframe types (`blur`, `shadow`). The CPU compositor draws the layer on black
+  and on white to recover its exact colour and alpha, then blurs and shadows
+  that. **The Windows GPU kernel does not draw these**; a project using them
+  opened in the original shows the keyframe clips but no effect.
 - Motion presets (`motion.py`: Motion menu and the clip right-click menu):
   slide in / out, pop, zoom, shake on video, image and text clips, with
   easing baked into ordinary keyframes (so projects stay readable by the

@@ -312,6 +312,12 @@ class Workspace(object):
         self.motion_options_action = self.motion_menu.addAction("Motion Options...")
         self.motion_options_action.triggered.connect(
             lambda: ask_motion_options(pm))
+        # Effects: drop shadow, blur, focus (effects.py)
+        from effects import add_effect_items
+        self.effects_menu = QMenu("Effects", pm)
+        self._effect_actions = add_effect_items(self.effects_menu)
+        for act, name in self._effect_actions.items():
+            act.triggered.connect(lambda checked=False, n=name: self._apply_effect(n))
         # Text: titles, lower thirds and reveals (text_anim.py)
         from text_anim import add_reveal_items, ask_reveal_speed
         self.text_menu = QMenu("Text", pm)
@@ -345,7 +351,8 @@ class Workspace(object):
         act.triggered.connect(self._render_front)
         self._mark_actions.append(act)
         for m in (self.edit_menu, self.footage_menu, self.sequence_menu,
-                  self.fade_menu, self.motion_menu, self.text_menu, self.mark_menu):
+                  self.fade_menu, self.motion_menu, self.effects_menu, self.text_menu,
+                  self.mark_menu):
             bar.insertMenu(self._anchor, m)
         self.sync_menus()
 
@@ -358,6 +365,16 @@ class Workspace(object):
         if tl is not None:
             import marks
             getattr(marks, name)(tl)
+
+    def _apply_effect(self, name):
+        tl = self._front_timeline()
+        if tl is None:
+            return
+        from effects import apply_effect
+        try:
+            apply_effect(tl, name, self.pm)
+        except Exception as e:
+            self.pm.status_bar.showMessage("Effect failed: %s" % e, 6000)
 
     def _add_title(self, kind):
         tl = self._front_timeline()
@@ -440,6 +457,8 @@ class Workspace(object):
         for act in self._motion_actions:
             act.setEnabled(tl is not None)
         for act in self._text_actions:
+            act.setEnabled(tl is not None)
+        for act in self._effect_actions:
             act.setEnabled(tl is not None)
         for act in self._mark_actions:
             act.setEnabled(tl is not None)

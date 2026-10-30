@@ -37,7 +37,10 @@ from PySide6.QtWidgets import (
 KEYFRAME_CLIP_TYPES = ("position X", "position Y", "scale", "volume", "opacity",
                        "crop_x", "crop_y", "gamma", "brightness", "contrast",
                        "rotate", "border", "move", "crop_xy",
-                       "crop_edges", "chroma")
+                       "crop_edges", "chroma", "blur", "shadow")
+# Blur (radius in sequence px, 0 = none) and Shadow (a drop shadow behind the
+# layer, strength percent 0..100, 0 = none; fixed soft down-right offset):
+# CPU backend only (effects.py, cpu_compositor)
 # Timeline title marker for a keyframe clip with no link_id
 UNLINKED_MARK = "(unlinked)"
 
@@ -59,6 +62,8 @@ KEYFRAME_TYPE_CHOICES = (
     ("Contrast", "contrast"),
     ("Rotate", "rotate"),
     ("Border", "border"),
+    ("Blur", "blur"),
+    ("Drop Shadow", "shadow"),
 )
 
 # Value range per stored type (others unbounded). Volume and opacity are
@@ -69,6 +74,7 @@ KEYFRAME_TYPE_CHOICES = (
 KEY_VALUE_RANGES = {"volume": (0.0, 100.0), "opacity": (0.0, 100.0),
                     "gamma": (0.1, 5.0), "brightness": (-100.0, 100.0),
                     "contrast": (0.0, 5.0), "border": (0.0, 1000.0),
+                    "blur": (0.0, 300.0), "shadow": (0.0, 100.0),
                     "chroma": (0.0, 255.0)}
 # Rotate is degrees and unbounded (any angle; 360 = a full
 # turn, so keys like 0 -> 720 spin twice). Its Add / Edit Key spin box
@@ -702,6 +708,16 @@ def collect_brightness_clips(clips_by_track, track_order=None):
 def collect_contrast_clips(clips_by_track, track_order=None):
     return _collect_keyframe_clips_of_type(
         clips_by_track, track_order, "contrast")
+
+
+def collect_blur_clips(clips_by_track, track_order=None):
+    return _collect_keyframe_clips_of_type(
+        clips_by_track, track_order, "blur")
+
+
+def collect_shadow_clips(clips_by_track, track_order=None):
+    return _collect_keyframe_clips_of_type(
+        clips_by_track, track_order, "shadow")
 
 
 def collect_rotate_clips(clips_by_track, track_order=None):
