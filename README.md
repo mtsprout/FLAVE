@@ -36,6 +36,7 @@ the original does not have (Finder drag and drop, fades and cross
 dissolves, In / Out points, footage names, fit scaling), and it lacks a few
 things the original has (proxy generation, screen capture).
 
+- **How to use it: [USAGE.md](USAGE.md)** (a walkthrough of the features).
 - **Full list of gaps, differences and gotchas: [MACOS-PORT.md](MACOS-PORT.md).**
 - Run it: `pip install PySide6 numpy pillow` (Pillow is optional but makes
   playback smoother), `brew install ffmpeg`, then `python project_manager.py`.
