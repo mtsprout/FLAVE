@@ -84,6 +84,7 @@ The menu bar changes with what is in front. The menus you will use most:
 | Tracks | Add a video, audio, image, caption, keyframe or text track |
 | Transitions | Fades, Cross Dissolve, Fade Length |
 | Motion | Slide, Pop, Zoom and Shake presets, Motion Options |
+| Text | Add Title, Add Lower Third, Reveal Selected Text, Typing Speed |
 | Mark | In and Out points, and Render In to Out |
 | Preview | Refresh, Clear Video, Clear Audio |
 | Settings | Global Settings, Project Settings |
@@ -330,6 +331,29 @@ Notes:
    shadow in the text style window.
 
 The last style you used is the style of every new text clip.
+
+### Titles and text animation
+
+The **Text** menu has ready-made titles and reveals. They use normal text clips
+and keyframes, so you can restyle or edit anything afterward.
+
+- **Add Title:** a centered "Title" at the playhead that fades in and out
+  (4 seconds). Change the words and style like any text clip.
+- **Add Lower Third:** a "Name" and a smaller "Subtitle" at the lower left, which
+  slide in from the left and fade out at the end (5 seconds). Each goes on its
+  own text track, and new tracks are created on top when none is free.
+- **Reveal Selected Text** (also a text clip's right-click > **Text Reveal**):
+  - **Typewriter:** one letter at a time (several lines reveal line by line).
+  - **Word by Word:** a word at a time, with a short pause after each.
+  - **Line by Line:** a line at a time, top down.
+  - **Wipe In / Wipe Out:** the text uncovers (or covers up) left to right over
+    about a second. Wipe Out sits at the end of the clip.
+- **Typing Speed...** sets characters per second for the typewriter (default 16).
+
+Edit the text first, then apply a reveal: the timing follows the words that are
+there. If you change the text afterward, apply the reveal again.
+
+The fades in the Transitions menu work on text clips too.
 
 ### Captions
 

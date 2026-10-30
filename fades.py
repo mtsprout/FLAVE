@@ -1,6 +1,6 @@
 # fades.py
 # One-click fades and dissolves. A fade is a keyframe clip: type opacity for
-# video / image clips, volume for audio clips, on a keyframe track above the
+# video / image / text clips, volume for audio clips, on a keyframe track above the
 # clip, linked to it by link_id, with keys at absolute sequence frames
 # (0 .. 100, linear between keys, flat outside them). These presets make
 # that clip and its keys for the selected clips, in one undo step:
@@ -21,7 +21,7 @@ DEFAULT_SECONDS = 1.0
 MODES = ("in", "out", "inout", "dissolve")
 LABELS = (("Fade In", "in"), ("Fade Out", "out"),
           ("Fade In and Out", "inout"), ("Cross Dissolve", "dissolve"))
-MEDIA_TRACKS = ("video", "image", "audio")
+MEDIA_TRACKS = ("video", "image", "audio", "text")
 
 
 def fade_seconds():
@@ -58,14 +58,10 @@ def ask_fade_length(parent, tl):
 # ---------------------------------------------------------------- database
 
 def _link_id(cur, clip_id):
-    # The clip's link_id; a clip with none becomes its own link group
-    cur.execute("SELECT link_id FROM clips WHERE id = ?", (int(clip_id),))
-    row = cur.fetchone()
-    if row is not None and row[0] is not None:
-        return int(row[0])
-    cur.execute("UPDATE clips SET link_id = ? WHERE id = ?",
-                (int(clip_id), int(clip_id)))
-    return int(clip_id)
+    # The clip's link_id; a clip with none becomes its own link group (the
+    # clip may be a media or a text clip)
+    from motion import _link_id as link_id
+    return link_id(cur, clip_id)
 
 
 def _sort_order(cur, track_id):
@@ -130,9 +126,10 @@ def _set_ramp(cur, kf_id, f0, f1, direction):
 def _media_clips(tl):
     # (clip, track id, track type) of the selected video / image / audio clips
     from keyframe import is_keyframe_clip_id
+    from text_clip import is_text_clip_id
     out = []
     for c in tl._selected_clips():
-        if c[0] <= 0 or is_keyframe_clip_id(c[0]):
+        if is_keyframe_clip_id(c[0]) or (c[0] <= 0 and not is_text_clip_id(c[0])):
             continue
         tid = tl._clip_track_id(c)
         ttype = (tl._track_type(tid) or "").lower()

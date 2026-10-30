@@ -312,6 +312,25 @@ class Workspace(object):
         self.motion_options_action = self.motion_menu.addAction("Motion Options...")
         self.motion_options_action.triggered.connect(
             lambda: ask_motion_options(pm))
+        # Text: titles, lower thirds and reveals (text_anim.py)
+        from text_anim import add_reveal_items, ask_reveal_speed
+        self.text_menu = QMenu("Text", pm)
+        self._text_actions = []
+        act = self.text_menu.addAction("Add Title")
+        act.triggered.connect(lambda: self._add_title("title"))
+        self._text_actions.append(act)
+        act = self.text_menu.addAction("Add Lower Third")
+        act.triggered.connect(lambda: self._add_title("lower_third"))
+        self._text_actions.append(act)
+        self.text_menu.addSeparator()
+        reveal = self.text_menu.addMenu("Reveal Selected Text")
+        self._reveal_actions = add_reveal_items(reveal)
+        for act, mode in self._reveal_actions.items():
+            act.triggered.connect(lambda checked=False, m=mode: self._apply_reveal(m))
+        self._text_actions.extend(self._reveal_actions)
+        self.text_menu.addSeparator()
+        self.text_menu.addAction("Typing Speed...").triggered.connect(
+            lambda: ask_reveal_speed(pm))
         # Mark: In and Out points for the render range (marks.py)
         self.mark_menu = QMenu("Mark", pm)
         self._mark_actions = []
@@ -326,7 +345,7 @@ class Workspace(object):
         act.triggered.connect(self._render_front)
         self._mark_actions.append(act)
         for m in (self.edit_menu, self.footage_menu, self.sequence_menu,
-                  self.fade_menu, self.motion_menu, self.mark_menu):
+                  self.fade_menu, self.motion_menu, self.text_menu, self.mark_menu):
             bar.insertMenu(self._anchor, m)
         self.sync_menus()
 
@@ -339,6 +358,26 @@ class Workspace(object):
         if tl is not None:
             import marks
             getattr(marks, name)(tl)
+
+    def _add_title(self, kind):
+        tl = self._front_timeline()
+        if tl is None:
+            return
+        from text_anim import add_title
+        try:
+            add_title(tl, kind)
+        except Exception as e:
+            self.pm.status_bar.showMessage("Title failed: %s" % e, 6000)
+
+    def _apply_reveal(self, mode):
+        tl = self._front_timeline()
+        if tl is None:
+            return
+        from text_anim import apply_reveal
+        try:
+            apply_reveal(tl, mode)
+        except Exception as e:
+            self.pm.status_bar.showMessage("Reveal failed: %s" % e, 6000)
 
     def _apply_motion(self, preset):
         tl = self._front_timeline()
@@ -396,6 +435,8 @@ class Workspace(object):
         for act in self._fade_actions:
             act.setEnabled(tl is not None)
         for act in self._motion_actions:
+            act.setEnabled(tl is not None)
+        for act in self._text_actions:
             act.setEnabled(tl is not None)
         for act in self._mark_actions:
             act.setEnabled(tl is not None)
