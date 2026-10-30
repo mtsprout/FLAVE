@@ -56,7 +56,7 @@ class ProjectSettingsWindow(QMainWindow):
     def __init__(self, parent=None, project_db=None):
         super().__init__(parent)
         self.setWindowTitle("Project Settings")
-        self.resize(500, 190)
+        self.resize(500, 220)
         self.project_db = (project_db or getattr(parent, "current_project", None)
                            or _current_project_from_global())
 
@@ -86,6 +86,20 @@ class ProjectSettingsWindow(QMainWindow):
             "size.\nChanging it marks the stored preview frames dirty; they "
             "are rebuilt at the new size (F5 / Refresh Preview).")
         form.addRow(QLabel("Preview Size:"), self.preview_size_combo)
+        # Snap to the timeline grid: follow the global setting, or force it
+        # on / off for this project only (ruler_grid.py)
+        import ruler_grid
+        self.grid_snap_combo = QComboBox()
+        self.grid_snap_combo.addItem("Use the global setting", "")
+        self.grid_snap_combo.addItem("On", "on")
+        self.grid_snap_combo.addItem("Off", "off")
+        self.grid_snap_combo.setCurrentIndex(max(0, self.grid_snap_combo.findData(
+            ruler_grid.project_value(self.project_db))))
+        self.grid_snap_combo.setToolTip(
+            "Clips, the playhead and In / Out marks snap to the timeline's grid "
+            "lines.\nThe global setting is in Global Settings; the S key toggles "
+            "this project.")
+        form.addRow(QLabel("Snap to Grid:"), self.grid_snap_combo)
         layout.addLayout(form)
         layout.addStretch(1)
 
@@ -114,6 +128,15 @@ class ProjectSettingsWindow(QMainWindow):
             return
         try:
             save_proxy_path(self.project_db, self.proxy_edit.text())
+            import ruler_grid
+            ruler_grid.set_project_value(self.project_db,
+                                         self.grid_snap_combo.currentData() or "")
+            try:
+                import sequence_timeline
+                for tl in list(sequence_timeline._open_windows.values()):
+                    ruler_grid.forget(tl)
+            except Exception:
+                pass
             pct = int(self.preview_size_combo.currentData() or 100)
             if pct != self._preview_pct:
                 set_preview_size_percent(self.project_db, pct)

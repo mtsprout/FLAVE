@@ -124,12 +124,51 @@ class RulerHeader(QHeaderView):
         kind = self._mark_drag
         a, b = getattr(tl, "_marks", (None, None)) or (None, None)
         f = self._mark_frame(kind, x - self._mark_grab)
+        import ruler_grid
+        edge, snapped = ruler_grid.snap_frame(tl, f if kind == "in" else f + 1)
+        if snapped:
+            f = max(0, min(tl.total_frames() - 1, edge if kind == "in" else edge - 1))
         if kind == "in":
             a = f if b is None else min(f, b)
         else:
             b = f if a is None else max(f, a)
         tl._marks = (a, b)
         self.viewport().update()
+
+    def _paint_subsecond(self, painter, rect, left, start, ppf, fps, first, last, sub):
+        # Zoomed in: ticks between the seconds, the labelled ones with a
+        # timecode (ruler_grid.subsecond_layout). Whole seconds keep the
+        # numbered ticks of paintSection.
+        from transport import timecode
+        label, minor = sub
+        base = max(1, int(round(fps)))
+        top = rect.top()
+        painter.save()
+        if minor is not None:
+            painter.setPen(QColor(120, 120, 120))
+            f = (first + minor - 1) // minor * minor
+            while f <= last:
+                if f % label:
+                    x = int(left + (f - start) * ppf)
+                    painter.drawLine(x, top, x, top + 3)
+                f += minor
+        font = painter.font()
+        font.setPointSizeF(max(6.0, font.pointSizeF() - 2))
+        painter.setFont(font)
+        fm = painter.fontMetrics()
+        text_y = min(rect.bottom() - PREVIEW_BAR_HEIGHT - AUDIO_BAR_HEIGHT,
+                     top + 8 + fm.height())
+        f = (first + label - 1) // label * label
+        while f <= last:
+            x = int(left + (f - start) * ppf)
+            painter.setPen(QColor(200, 200, 200))
+            painter.drawLine(x, top, x, top + 6)
+            if f % base:
+                text = timecode(f, fps)
+                painter.setPen(QColor(150, 150, 150))
+                painter.drawText(x - fm.horizontalAdvance(text) // 2, text_y, text)
+            f += label
+        painter.restore()
 
     def _paint_marks(self, painter, rect, left, start, ppf, total):
         # In / Out marks (marks.py) at the top edge of the ruler: a bracket
@@ -228,6 +267,14 @@ class RulerHeader(QHeaderView):
                 text_x = x - fm.horizontalAdvance(text) // 2
                 painter.drawText(text_x, text_y, text)
                 sec += interval
+        try:
+            import ruler_grid
+            sub = ruler_grid.subsecond_layout(ppf, fps) if (
+                fps > 0 and ruler_grid.enabled_ui()) else None
+        except Exception:
+            sub = None
+        if sub is not None:
+            self._paint_subsecond(painter, rect, left, start, ppf, fps, first, last, sub)
         self._paint_marks(painter, rect, left, start, ppf, total)
         # Preview cache bar under the ruler: red = missing or dirty,
         # green = clean row in {ProjectName}_{sequence_id}_Preview.db. One range query.
@@ -430,6 +477,8 @@ class RulerHeader(QHeaderView):
         # playing), a one-frame audio burst from the preview mix WAV
         tl = self.timeline
         before = tl.current_frame
+        import ruler_grid
+        frame, _snapped = ruler_grid.snap_frame(tl, frame)
         tl.set_current_frame(frame)
         if tl.current_frame != before:
             from sequence_player_audio import scrub_burst
@@ -687,6 +736,17 @@ class PlayheadOverlay(QWidget):
             elif show_minor:
                 painter.fillRect(x, 0, 1, h, minor)
             sec += sec_step
+        import ruler_grid
+        sub = ruler_grid.subsecond_layout(ppf, fps)
+        if sub is not None:
+            label_step, minor_step = sub
+            for step, color in ((minor_step, minor), (label_step, major)):
+                if not step or (color is minor and step * ppf < 16):
+                    continue
+                f = (first + step - 1) // step * step
+                while f <= last:
+                    painter.fillRect(int(left + (f - start) * ppf), 0, 1, h, color)
+                    f += step
         painter.restore()
 
     def paintEvent(self, event):

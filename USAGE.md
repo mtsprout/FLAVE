@@ -221,7 +221,16 @@ doesn't change what you render.
   to jump there, and double-click to fit the whole sequence.
 - **Track height:** the slider at the bottom left of the timeline makes every
   track taller or shorter. This is display only, and it is remembered.
-- Vertical lines in the clip area mark timecode steps.
+- **Ruler marks and grid lines follow the zoom.** Zoomed out, the ruler is numbered
+  in seconds (or minutes). As you zoom in, it subdivides: half-second marks with
+  timecode labels, then labels every 10, 5, 2 and finally every frame, with lighter
+  ticks between. The vertical grid lines in the clip area follow the same marks.
+- **Snap to grid.** When you move or trim a clip, scrub the playhead in the ruler, or
+  drag an In or Out mark, it jumps onto a nearby grid line (within about 6 pixels, or
+  your Pixel Snap-To setting if that is larger). A white line shows what it snapped
+  to. Clips also keep snapping to other clips' edges and to markers as before. Turn
+  grid snapping off or on with **Edit > Snap to Grid** or the **S** key. That setting
+  is for the current project; see Settings below for the global default.
 
 ## 8. Editing clips
 
@@ -481,8 +490,10 @@ chosen size, FLAVE shows a warning and uses the CPU encoder instead.
 - Preview JPEG quality and Preview Frame Cap
 - Undo stack max
 - Pixel Snap-To (how close an edge must be to snap)
+- Snap to timeline grid (the default for every project; a project can override it)
 
-**Settings > Project Settings** (this project only): Preview Size, and the proxy
+**Settings > Project Settings** (this project only): Preview Size, **Snap to Grid**
+(follow the global setting, always on, or off for this project), and the proxy
 folder. Proxy generation is not available on the Mac, so the proxy folder does
 nothing in this version.
 
@@ -496,6 +507,7 @@ On a Mac, read `Ctrl` as **Command**.
 | Key | Action |
 |---|---|
 | Space | Play / Pause |
+| S | Snap to Grid on / off (this project) |
 | K / L | Pause / Play |
 | Left / Right | Previous / next frame |
 | Shift+Left / Right | Back / forward ten frames |

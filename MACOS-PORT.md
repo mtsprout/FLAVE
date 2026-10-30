@@ -153,6 +153,13 @@ None of these exist in the original.
   and on white to recover its exact colour and alpha, then blurs and shadows
   that. **The Windows GPU kernel does not draw these**; a project using them
   opened in the original shows the keyframe clips but no effect.
+- Zoom-aware ruler marks and grid snapping (`ruler_grid.py`): the ruler and grid
+  lines subdivide into half-second and frame marks with timecode labels as you
+  zoom in; clips, the playhead and In / Out marks snap to the grid lines. On by
+  default; the global setting `Snap to Grid` (Global Settings) can be
+  overridden per project (`GridSnap` in the project's `settings` table; Project
+  Settings, Edit > Snap to Grid, the S key). Extra rows in `settings` are ignored
+  by the original.
 - Motion presets (`motion.py`: Motion menu and the clip right-click menu):
   slide in / out, pop, zoom, shake on video, image and text clips, with
   easing baked into ordinary keyframes (so projects stay readable by the

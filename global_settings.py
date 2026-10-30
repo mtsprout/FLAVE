@@ -37,6 +37,7 @@ GLOBAL_DEFAULTS = (
     ("previewFrameCap", "120"),
     ("UndoStackMax", "50"),
     ("Pixel Snap-To", "2"),
+    ("Snap to Grid", "1"),
     ("previewBatchSeconds", "1"),
     ("previewGpuBatchFrames", "8"),
     ("previewBurstFrames", "15"),
@@ -212,6 +213,11 @@ class GlobalSettingsWindow(QMainWindow):
         self.dark_check.stateChanged.connect(self._on_dark_changed)
         layout.addWidget(self.dark_check)
 
+        # Clips, the playhead and In / Out marks snap to the timeline's grid
+        # lines (ruler_grid.py); a project can override this (Project Settings)
+        self.grid_snap_check = QCheckBox("Snap to timeline grid (every project, unless it overrides)")
+        layout.addWidget(self.grid_snap_check)
+
         icon_w_label = QLabel("FootageManager_IconMaxWidthPx:")
         layout.addWidget(icon_w_label)
         self.icon_w_edit = QLineEdit()
@@ -301,6 +307,8 @@ class GlobalSettingsWindow(QMainWindow):
         self.frame_cap_edit.setText(_get_global_setting("previewFrameCap", "120") or "120")
         self.undo_max_edit.setText(_get_global_setting("UndoStackMax", "50") or "50")
         self.snap_px_edit.setText(_get_global_setting("Pixel Snap-To", "2") or "2")
+        self.grid_snap_check.setChecked(
+            (_get_global_setting("Snap to Grid", "1") or "1") != "0")
 
         align = _get_global_setting("playercontrols_alignment", "left")
         idx = self.align_combo.findData(align or "left")
@@ -316,6 +324,13 @@ class GlobalSettingsWindow(QMainWindow):
 
         dark = "1" if self.dark_check.isChecked() else "0"
         _set_global_setting("dark_mode", dark)
+        _set_global_setting("Snap to Grid", "1" if self.grid_snap_check.isChecked() else "0")
+        try:
+            import ruler_grid, sequence_timeline
+            for tl in list(sequence_timeline._open_windows.values()):
+                ruler_grid.forget(tl)
+        except Exception:
+            pass
 
         try:
             iw = int(self.icon_w_edit.text().strip() or "64")

@@ -290,6 +290,14 @@ class Workspace(object):
         pm.file_menu.insertSeparator(before)
         # Edit (Undo / Redo, then the front timeline's), Footage, Sequence
         self.edit_menu = QMenu("Edit", pm)
+        # Snap to Grid (the S key): this project's own on / off (ruler_grid.py)
+        self.snap_action = QAction("Snap to Grid\tS", pm)
+        self.snap_action.setCheckable(True)
+        self.snap_action.triggered.connect(self._toggle_snap)
+        self.edit_menu.aboutToShow.connect(self._sync_snap_action)
+        from PySide6.QtGui import QKeySequence, QShortcut
+        self._snap_key = QShortcut(QKeySequence("S"), pm)
+        self._snap_key.activated.connect(self._toggle_snap)
         self.footage_menu = QMenu("Footage", pm)
         self.sequence_menu = QMenu("Sequence", pm)
         # Transitions: fades and dissolves for the selected clips (fades.py)
@@ -365,6 +373,23 @@ class Workspace(object):
         if tl is not None:
             import marks
             getattr(marks, name)(tl)
+
+    def _toggle_snap(self, checked=None):
+        tl = self._front_timeline()
+        if tl is None:
+            return
+        import ruler_grid
+        ruler_grid.toggle(tl)
+        self._sync_snap_action()
+
+    def _sync_snap_action(self):
+        tl = self._front_timeline()
+        self.snap_action.setEnabled(tl is not None)
+        if tl is not None:
+            import ruler_grid
+            self.snap_action.blockSignals(True)
+            self.snap_action.setChecked(ruler_grid.snap_on(tl))
+            self.snap_action.blockSignals(False)
 
     def _apply_effect(self, name):
         tl = self._front_timeline()
@@ -477,6 +502,8 @@ class Workspace(object):
         self.edit_menu.clear()
         self.edit_menu.addAction(pm.undo_action)
         self.edit_menu.addAction(pm.redo_action)
+        self.edit_menu.addSeparator()
+        self.edit_menu.addAction(self.snap_action)
         if tl is not None:
             self.edit_menu.addSeparator()
             for a in tl.menuBar().actions():

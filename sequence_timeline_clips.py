@@ -916,7 +916,9 @@ def _snap_drag_delta(self, drag, group, pos, delta):
     # butting up to a neighbor.
     snap_px = drag.get("snap_px", 0)
     ppf = float(self.pixels_per_frame or 0)
-    if snap_px <= 0 or ppf <= 0:
+    import ruler_grid
+    grid_on = ruler_grid.snap_on(self)
+    if (snap_px <= 0 and not grid_on) or ppf <= 0:
         self._set_snap_frame(None)
         return delta
     try:
@@ -948,6 +950,14 @@ def _snap_drag_delta(self, drag, group, pos, delta):
                           getattr(self, "_clip_speeds", None))))
         snapped, target = snap_delta_target(
             raw, edges, targets, ppf, snap_px)
+        if grid_on:
+            # the grid lines too (ruler_grid.py): the closer of the two wins
+            g_snapped, g_target = snap_delta_target(
+                raw, edges, ruler_grid.targets(self), ppf, ruler_grid.snap_px(self))
+            if g_snapped is not None and (
+                    snapped is None
+                    or abs(g_snapped - raw) < abs(snapped - raw)):
+                snapped, target = g_snapped, g_target
     except Exception as e:
         # print(f"Snap failed: {e}")
         self._set_snap_frame(None)
