@@ -164,6 +164,18 @@ onto the timeline.
   (a 4K clip in a 1080p sequence shows whole, not cropped). The scale is stored
   with the clip, and you can still change it with keyframes.
 
+**The drop preview.** While you drag over the timeline, a ghost box shows where
+the clip will land, with the start timecode:
+
+- A **white box** is where the clip (and its linked audio) will go on an existing
+  track.
+- A **dashed blue box** below the last track means no track is under the pointer,
+  so FLAVE will create the tracks it needs ("New video track", "New audio track").
+- A **red box** ("Can't drop here") means the drop would be refused: the wrong kind
+  of track, or the start is inside another clip on that track.
+- Dragging several files from Finder shows them one after another, as they will be
+  placed.
+
 **Drop footage on the player.** This adds the clip at the playhead.
 
 **Double-click a footage row** to add that clip at the playhead.

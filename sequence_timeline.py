@@ -1330,11 +1330,20 @@ class SequenceTimeline(QMainWindow):
                     event.setDropAction(Qt.CopyAction)
                     event.accept()
                 elif media_paths(event.mimeData()):
-                    # Files from Finder: no preview box (they are not in the
-                    # project yet), the drop imports and places them
-                    drag_end(self)
+                    # Files from Finder: not in the project yet, so the
+                    # preview is made from the files themselves; the drop
+                    # imports and places them
                     event.setDropAction(Qt.CopyAction)
                     event.accept()
+                    try:
+                        from sequence_timeline_droppreview import drag_enter_files
+                        pos = event.position().toPoint()
+                        if etype == QEvent.DragEnter or getattr(self, "_drop_info", None) is None:
+                            drag_enter_files(self, media_paths(event.mimeData()), pos)
+                        else:
+                            drag_move(self, pos)
+                    except Exception:
+                        drag_end(self)
                 else:
                     fid = self._footage_id_from_mime(event.mimeData())
                     if fid is not None:

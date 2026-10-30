@@ -144,6 +144,9 @@ None of these exist in the original.
   menu): Typewriter, Word by Word, Line by Line, Wipe In / Out reveals (crop
   keyframes on the text layer, so no compositor change), and Add Title / Add
   Lower Third templates. Fades (`fades.py`) now also work on text clips.
+- Drop preview (`sequence_timeline_droppreview.py`, extended): ghost boxes also
+  for Finder drags (probed with ffprobe), dashed boxes for tracks the drop will
+  create, red boxes where it would be refused, and a timecode label.
 - Motion presets (`motion.py`: Motion menu and the clip right-click menu):
   slide in / out, pop, zoom, shake on video, image and text clips, with
   easing baked into ordinary keyframes (so projects stay readable by the
