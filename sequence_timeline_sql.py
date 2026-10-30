@@ -496,6 +496,9 @@ def _move_track_to(self, track_id, where):
 # Display scale of every open track row (timeline_scale.py slider); 1.0 =
 # the saved height_px of each track
 TRACK_HEIGHT_SCALE = [1.0]
+# Smallest open row the slider can make; the slider's low end is set so a
+# default 64 px track reaches it exactly (timeline_scale.TRACK_SCALE_MIN)
+MIN_SCALED_ROW = 24
 
 
 def track_row_height(open_height, collapsed):
@@ -511,7 +514,7 @@ def track_row_height(open_height, collapsed):
         h = DEFAULT_TRACK_HEIGHT
     h = h if h > 0 else DEFAULT_TRACK_HEIGHT
     scale = TRACK_HEIGHT_SCALE[0]
-    return h if scale == 1.0 else max(28, int(round(h * scale)))
+    return h if scale == 1.0 else max(MIN_SCALED_ROW, int(round(h * scale)))
 
 
 def _toggle_track_flag(self, track_id, column):

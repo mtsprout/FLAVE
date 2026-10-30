@@ -14,7 +14,7 @@ import theme
 
 TRACK_SCALE_KEY = "timeline_track_scale"     # percent of the saved track height
 TRACK_SCALE_DEFAULT = 60
-TRACK_SCALE_MIN, TRACK_SCALE_MAX = 30, 160
+TRACK_SCALE_MIN, TRACK_SCALE_MAX = 38, 200   # 38% of a 64 px track = 24 px, the row floor
 HANDLE = 7                                   # px: grab zone at each end
 
 
