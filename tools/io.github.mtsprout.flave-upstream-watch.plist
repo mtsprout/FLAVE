@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>io.github.mtsprout.flave-upstream-watch</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/csprout/projects/FLAVE/tools/upstream_watch.sh</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict><key>Hour</key><integer>7</integer><key>Minute</key><integer>0</integer></dict>
+  <key>StandardErrorPath</key><string>/Users/csprout/projects/FLAVE/upstream-reports/launchd.err</string>
+  <key>RunAtLoad</key><false/>
+</dict>
+</plist>

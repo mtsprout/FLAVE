@@ -283,3 +283,16 @@ The original keeps changing; this port has to be merged forward regularly.
   both.
 - Project files, preview caches (`*_Preview.db`), audio caches and undo files
   sit beside the project, as in the original.
+
+### Daily upstream check
+
+`tools/upstream_watch.sh` runs every day at 07:00 through a launch agent
+(`~/Library/LaunchAgents/io.github.mtsprout.flave-upstream-watch.plist`; the
+source copy is in `tools/`). It only runs `git fetch upstream`. If the
+original's `main` has new commits, a read-only Claude run writes a triage
+report to `upstream-reports/YYYY-MM-DD.md` (what changed, whether it applies,
+port work needed, merge forecast) and a macOS notification appears. It never
+merges or pushes. The log is `upstream-reports/watch.log`. Run it by hand with
+`tools/upstream_watch.sh --force`. The Mac must be awake; a missed run happens
+at the next wake. Stop it with
+`launchctl bootout gui/$(id -u)/io.github.mtsprout.flave-upstream-watch`.
