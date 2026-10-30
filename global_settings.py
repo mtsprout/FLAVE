@@ -8,7 +8,7 @@ import sqlite3
 import threading
 from PySide6.QtWidgets import (
     QMainWindow, QLabel, QVBoxLayout, QWidget, QPushButton,
-    QLineEdit, QCheckBox, QApplication, QComboBox
+    QLineEdit, QCheckBox, QApplication, QComboBox, QToolButton, QFormLayout
 )
 from PySide6.QtCore import Qt
 
@@ -198,11 +198,12 @@ class GlobalSettingsWindow(QMainWindow):
         super().__init__(parent)
         self.setWindowTitle("Global Settings")
         self.resize(520, 220)
+        self.setMinimumWidth(480)
 
         central = QWidget()
         layout = QVBoxLayout(central)
 
-        folder_label = QLabel("Current Project Folder:")
+        folder_label = QLabel("Folder new and opened projects start in:")
         layout.addWidget(folder_label)
 
         self.folder_edit = QLineEdit()
@@ -218,18 +219,6 @@ class GlobalSettingsWindow(QMainWindow):
         self.grid_snap_check = QCheckBox("Snap to timeline grid (every project, unless it overrides)")
         layout.addWidget(self.grid_snap_check)
 
-        icon_w_label = QLabel("FootageManager_IconMaxWidthPx:")
-        layout.addWidget(icon_w_label)
-        self.icon_w_edit = QLineEdit()
-        self.icon_w_edit.setPlaceholderText("64")
-        layout.addWidget(self.icon_w_edit)
-
-        icon_h_label = QLabel("FootageManager_IconMaxHeightPx:")
-        layout.addWidget(icon_h_label)
-        self.icon_h_edit = QLineEdit()
-        self.icon_h_edit.setPlaceholderText("64")
-        layout.addWidget(self.icon_h_edit)
-
         align_label = QLabel("Player controls alignment:")
         layout.addWidget(align_label)
         self.align_combo = QComboBox()
@@ -238,44 +227,39 @@ class GlobalSettingsWindow(QMainWindow):
         self.align_combo.addItem("Right", "right")
         layout.addWidget(self.align_combo)
 
-        tic_c_label = QLabel("Playhead center tick height (px)")
-        layout.addWidget(tic_c_label)
-        self.tic_center_edit = QLineEdit()
-        self.tic_center_edit.setPlaceholderText("10")
-        layout.addWidget(self.tic_center_edit)
+        # The pixel and tuning values: out of the way unless asked for
+        self.advanced_btn = QToolButton()
+        self.advanced_btn.setText("Advanced")
+        self.advanced_btn.setCheckable(True)
+        self.advanced_btn.setArrowType(Qt.RightArrow)
+        self.advanced_btn.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.advanced_btn.setAutoRaise(True)
+        self.advanced_btn.toggled.connect(self._toggle_advanced)
+        layout.addWidget(self.advanced_btn)
 
-        tic_o_label = QLabel("Playhead outer tick height (px)")
-        layout.addWidget(tic_o_label)
-        self.tic_outer_edit = QLineEdit()
-        self.tic_outer_edit.setPlaceholderText("6")
-        layout.addWidget(self.tic_outer_edit)
+        self.advanced_box = QWidget()
+        form = QFormLayout(self.advanced_box)
+        form.setContentsMargins(12, 0, 0, 0)
 
-        jpeg_q_label = QLabel("Preview JPEG quality")
-        layout.addWidget(jpeg_q_label)
-        self.jpeg_q_edit = QLineEdit()
-        self.jpeg_q_edit.setPlaceholderText("90")
-        layout.addWidget(self.jpeg_q_edit)
+        def field(label, placeholder):
+            edit = QLineEdit()
+            edit.setPlaceholderText(placeholder)
+            form.addRow(label, edit)
+            return edit
 
-        # Preview burst / idle / batch seconds / GPU batch frames
-        # fields removed (their code defaults apply); Preview Frame Cap: the
-        # largest N of the explicit preview refresh (F5 / Play on dirty)
-        frame_cap_label = QLabel("Preview Frame Cap")
-        layout.addWidget(frame_cap_label)
-        self.frame_cap_edit = QLineEdit()
-        self.frame_cap_edit.setPlaceholderText("120")
-        layout.addWidget(self.frame_cap_edit)
-
-        undo_max_label = QLabel("Undo stack max")
-        layout.addWidget(undo_max_label)
-        self.undo_max_edit = QLineEdit()
-        self.undo_max_edit.setPlaceholderText("50")
-        layout.addWidget(self.undo_max_edit)
-
-        snap_label = QLabel("Pixel Snap-To")
-        layout.addWidget(snap_label)
-        self.snap_px_edit = QLineEdit()
-        self.snap_px_edit.setPlaceholderText("2")
-        layout.addWidget(self.snap_px_edit)
+        self.icon_w_edit = field("Footage thumbnail width (px)", "64")
+        self.icon_h_edit = field("Footage thumbnail height (px)", "64")
+        self.tic_center_edit = field("Playhead center tick height (px)", "10")
+        self.tic_outer_edit = field("Playhead outer tick height (px)", "6")
+        self.jpeg_q_edit = field("Preview JPEG quality (1-100)", "90")
+        # Preview burst / idle / batch seconds / GPU batch frames fields
+        # removed (their code defaults apply); the frame cap is the largest N
+        # of the explicit preview refresh (F5 / Play on dirty)
+        self.frame_cap_edit = field("Preview frame limit", "120")
+        self.undo_max_edit = field("Undo history length", "50")
+        self.snap_px_edit = field("Snap distance (px)", "2")
+        self.advanced_box.setVisible(False)
+        layout.addWidget(self.advanced_box)
 
         apply_btn = QPushButton("Apply")
         apply_btn.clicked.connect(self._apply)
@@ -313,6 +297,11 @@ class GlobalSettingsWindow(QMainWindow):
         align = _get_global_setting("playercontrols_alignment", "left")
         idx = self.align_combo.findData(align or "left")
         self.align_combo.setCurrentIndex(idx if idx >= 0 else 0)
+
+    def _toggle_advanced(self, shown):
+        self.advanced_btn.setArrowType(Qt.DownArrow if shown else Qt.RightArrow)
+        self.advanced_box.setVisible(shown)
+        self.adjustSize()
 
     def _on_dark_changed(self, state):
         enabled = self.dark_check.isChecked()

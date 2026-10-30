@@ -71,7 +71,11 @@ class ProjectSettingsWindow(QMainWindow):
         proxy_row = QHBoxLayout()
         proxy_row.addWidget(self.proxy_edit, 1)
         proxy_row.addWidget(self.proxy_browse_btn)
-        form.addRow(QLabel("Proxy Path:"), proxy_row)
+        # Proxies are not generated on the Mac (CPU backend), so the folder
+        # is not offered there; its stored value is kept as it is
+        from cpu_compositor import use_cpu_backend
+        if not use_cpu_backend():
+            form.addRow(QLabel("Proxy Path:"), proxy_row)
         # Preview Size: percent of the sequence size the preview frames are
         # stored at (smaller = less disk and faster preview builds; the
         # Sequence Player scales them up to fill its view)

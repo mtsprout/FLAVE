@@ -480,22 +480,21 @@ chosen size, FLAVE shows a warning and uses the CPU encoder instead.
 
 ## 15. Settings
 
-**Settings > Global Settings** (applies to every project):
+**Settings > Global Settings** (applies to every project) opens as a dialog with the
+everyday options up top:
 
-- Current project folder
+- The folder new and opened projects start in
 - Dark Mode (the theme follows it)
-- Footage icon size
-- Player controls alignment
-- Playhead tick heights
-- Preview JPEG quality and Preview Frame Cap
-- Undo stack max
-- Pixel Snap-To (how close an edge must be to snap)
 - Snap to timeline grid (the default for every project; a project can override it)
+- Player controls alignment
 
-**Settings > Project Settings** (this project only): Preview Size, **Snap to Grid**
-(follow the global setting, always on, or off for this project), and the proxy
-folder. Proxy generation is not available on the Mac, so the proxy folder does
-nothing in this version.
+Click **Advanced** for the fine-tuning values: footage thumbnail size, playhead tick
+heights, preview JPEG quality, preview frame limit, undo history length, and the snap
+distance in pixels. The defaults suit most people.
+
+**Settings > Project Settings** (this project only): Preview Size, and **Snap to Grid**
+(follow the global setting, always on, or off for this project). The proxy folder is
+hidden on the Mac, since proxy generation isn't available in this version.
 
 Where FLAVE keeps its settings: from source, in `globalsettings.db` in the code
 folder. In the packaged app, in `~/Library/Application Support/FLAVE for Mac`.
