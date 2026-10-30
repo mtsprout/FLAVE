@@ -219,7 +219,9 @@ def slice_key_exit(tl):
     # closes the editor). A text input keeps its keys.
     if text_input_focused(tl):
         return False
-    return exit_slice_mode(tl)
+    import edit_tools
+    reset = edit_tools.reset(tl)             # Ripple / Roll / Slip -> Select
+    return exit_slice_mode(tl) or reset
 
 
 def slice_event(tl, obj, event):

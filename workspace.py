@@ -692,8 +692,9 @@ class Workspace(object):
         win.centralWidget().layout().addWidget(TimelineScaleBar(win))
         # above them: the tool bar (Select, Razor), and sliding a track by its
         # name reorders the tracks
-        from timeline_tools import ToolBar
+        from timeline_tools import ToolBar, install_keys
         win.centralWidget().layout().insertWidget(0, ToolBar(win))
+        install_keys(win)
         import track_drag
         track_drag.install(win)
         st._open_windows[sid] = win

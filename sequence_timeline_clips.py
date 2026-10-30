@@ -827,6 +827,11 @@ def _edge_drag_move(self, pos, tick=False):
     elif timer.isActive():
         timer.stop()
     frame = self._frame_at_clips_x(self._x_in_clips(pos))
+    if edge in ("roll", "slip"):
+        import edit_tools
+        edit_tools.drag_move(self, drag, frame)
+        self.table.viewport().update()
+        return
     if edge == "move":
         target = self._move_target_track(pos, drag)
         if target is not None:
@@ -868,8 +873,13 @@ def _edge_drag_move(self, pos, tick=False):
                            drag["grab_offset"], drag["orig_length"])
         drag["cur_delta"] = delta
     else:
-        lo, hi = self._group_delta_range(group, edge)
+        ripple = drag.get("ripple")
+        lo, hi = self._group_delta_range(group, edge, ripple is not None)
         delta = max(lo, min(hi, delta)) if lo <= hi else 0
+        if ripple is not None:
+            # what follows must not run into a clip that does not move
+            delta = (max(delta, ripple["min"]) if edge == "right"
+                     else min(delta, -ripple["min"]))
     for m in group:
         c = m["clip"]
         if edge == "move":
@@ -883,11 +893,15 @@ def _edge_drag_move(self, pos, tick=False):
             # The in-point moves by the source frames delta
             # timeline frames cover at the clip's speed
             from clip_speed import source_offset
-            c[2] = m["start"] + delta
+            # Ripple keeps the clip's start; the clips after it move instead
+            c[2] = m["start"] if drag.get("ripple") is not None else m["start"] + delta
             c[3] = m["length"] - delta
             c[7] = m["in"] + source_offset(delta, m.get("speed", 100))
         else:
             c[3] = m["length"] + delta
+    if edge != "move" and drag.get("ripple") is not None:
+        import edit_tools
+        edit_tools.ripple_apply(self, drag, delta)
     if edge == "move":
         # Shift held: white cut line at the insert frame
         from sequence_timeline_insert import insert_watch, set_insert_frame
@@ -979,8 +993,11 @@ def _set_snap_frame(self, frame):
         pass
 
 
-def _group_delta_range(self, group, edge):
-    # Allowed (lo, hi) frame delta for all members at once
+def _group_delta_range(self, group, edge, ripple=False):
+    # Allowed (lo, hi) frame delta for all members at once. ripple (the
+    # Ripple tool): a right trim may grow past the next clip, which moves
+    # out of the way, and a left trim keeps the start, so neither is held by
+    # a neighbour.
     lo, hi = -10 ** 9, 10 ** 9
     for m in group:
         start, length, in_f = m["start"], m["length"], m["in"]
@@ -997,7 +1014,8 @@ def _group_delta_range(self, group, edge):
             # stack is held only by its video / audio members' in-points.
             # At speed s the in-point moves by floor(d * s /
             # 100), so in + that >= 0 is d >= -floor(in * 100 / s).
-            lo = max(lo, max(0, prev_end) - start)
+            if not ripple:
+                lo = max(lo, max(0, prev_end) - start)
             speed = m.get("speed", 100)
             if not m.get("free_in"):
                 lo = max(lo, -in_f if speed == 100 else -((in_f * 100) // speed))
@@ -1010,7 +1028,7 @@ def _group_delta_range(self, group, edge):
             # the source used is clip_speed.source_span(length, s), so the
             # longest length is max_length_for_source(src_end - in, s).
             lo = max(lo, 1 - length)
-            if next_start is not None:
+            if next_start is not None and not ripple:
                 hi = min(hi, next_start - (start + length))
             speed = m.get("speed", 100)
             if m.get("src_end") and speed == 100:
@@ -1721,10 +1739,22 @@ def _edge_drag_release(self):
         return
     group = drag.get("group") or [{"clip": clip}]
     from undo import push_undo
-    push_undo(self._project_db(), "Trim clip")
+    push_undo(self._project_db(), drag.get("label", "Trim clip"))
     try:
         conn = sqlite3.connect(self._project_db())
         cur = conn.cursor()
+        # Ripple: the clips after the trim moved (edit_tools.py)
+        rp = drag.get("ripple")
+        if rp is not None:
+            from keyframe import is_keyframe_clip_id as _is_kf, persist_keyframe_clip_time as _kf_time
+            for c in rp["moving"].values():
+                if int(c[2]) == rp["orig"][c[0]]:
+                    continue
+                if _is_kf(c[0]):
+                    _kf_time(cur, c)
+                    continue
+                _t, _row = clip_table_and_id(c[0])
+                cur.execute(f"UPDATE {_t} SET start_frame = ? WHERE id = ?", (c[2], _row))
         for m in group:
             c = m["clip"]
             from keyframe import is_keyframe_clip_id, persist_keyframe_clip_time
@@ -1831,6 +1861,10 @@ def _clip_press_select(self, event, press_pos):
 def _clip_press_drag(self, event):
     # EventFilter's left press, edge trim / move drag start.
     # True when a drag started (the caller returns True then).
+    import edit_tools
+    if edit_tools.current(self) != "select":
+        # Ripple / Roll / Slip (edit_tools.py)
+        return edit_tools.press(self, event)
     hit = self._clip_edge_at(event.position().toPoint())
     if hit is not None:
         clip, edge = hit
@@ -1865,6 +1899,16 @@ def _clip_press_drag(self, event):
 
 def _clip_edge_cursor(self, obj, pos):
     # EventFilter's mouse move, edge-resize pointer over a clip edge
+    import edit_tools
+    tool = edit_tools.current(self)
+    if tool == "slip":
+        obj.setCursor(Qt.SizeHorCursor if self._clip_at(pos) is not None
+                      else Qt.ArrowCursor)
+        return
+    if tool in ("ripple", "roll"):
+        obj.setCursor(Qt.SplitHCursor if self._clip_edge_at(pos) is not None
+                      else Qt.ArrowCursor)
+        return
     if self._clip_edge_at(pos) is not None:
         obj.setCursor(Qt.SplitHCursor)
     else:

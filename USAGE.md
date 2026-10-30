@@ -251,9 +251,30 @@ space) or by clicking several.
 | Rename a clip | Right-click > Rename |
 | Disable / Solo | Right-click > Disable (or Enable), Solo |
 | Add a marker | Right-click > Marker > Add To Mouse Click, or Add to Time Tick |
+| Ripple, roll or slip | Pick the tool in the tool bar or press `B`, `N` or `Y` (see below). `V` goes back to Select. |
 | Detect scene cuts | Right-click a video clip > **Scene Detect (Slice)** |
 
 Right-click on a marker to edit or delete it.
+
+### Editing tools
+
+The tool bar above the tracks has **Select** (`V`), **Razor** (`C`), **Ripple** (`B`),
+**Roll** (`N`) and **Slip** (`Y`). Press `V` or Esc to go back to Select.
+
+- **Ripple:** drag a clip's edge. The clip is trimmed and everything after it, on every
+  track, moves by the same amount, so no gap opens and none is lost. Dragging a left
+  edge keeps the clip where it is and changes what it shows. Linked audio trims with the
+  video. Things that would run into a clip that can't move stop at it.
+- **Roll:** drag the cut between two clips that touch. The first clip's end and the second
+  clip's start move together, so the total length doesn't change. Linked audio rolls too.
+  It stops when either clip would shrink to nothing or run out of source. A clip edge
+  with no clip touching it can't be rolled.
+- **Slip:** drag inside a video or audio clip. The clip keeps its place and length, and
+  shows an earlier or later part of its source (drag right to see earlier footage). It
+  stops at the start or end of the source file. Linked audio slips with the video. Text,
+  image and keyframe clips have no source to slip.
+
+All three snap to the grid like other edits, and each is one undo step.
 
 ## 9. Tracks
 
@@ -520,6 +541,7 @@ On a Mac, read `Ctrl` as **Command**.
 | Shift+I / Shift+O | Go to In / Out |
 | Alt+X | Clear In and Out |
 | C / V | Razor tool / Select tool |
+| B / N / Y | Ripple / Roll / Slip tool |
 | Delete | Delete the selected clip |
 | Ctrl+C / Ctrl+X / Ctrl+V | Copy / Cut / Paste at the playhead |
 | Ctrl+Z / Ctrl+Y | Undo / Redo |
