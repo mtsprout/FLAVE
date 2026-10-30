@@ -244,6 +244,16 @@ class Workspace(object):
         self.fade_length_action = self.fade_menu.addAction("Fade Length...")
         self.fade_length_action.triggered.connect(
             lambda: ask_fade_length(pm, self._front_timeline()))
+        # Motion: slide / pop / zoom / shake presets (motion.py)
+        from motion import add_motion_items, ask_motion_options
+        self.motion_menu = QMenu("Motion", pm)
+        self._motion_actions = add_motion_items(self.motion_menu)
+        for act, preset in self._motion_actions.items():
+            act.triggered.connect(lambda checked=False, p=preset: self._apply_motion(p))
+        self.motion_menu.addSeparator()
+        self.motion_options_action = self.motion_menu.addAction("Motion Options...")
+        self.motion_options_action.triggered.connect(
+            lambda: ask_motion_options(pm))
         # Mark: In and Out points for the render range (marks.py)
         self.mark_menu = QMenu("Mark", pm)
         self._mark_actions = []
@@ -258,7 +268,7 @@ class Workspace(object):
         act.triggered.connect(self._render_front)
         self._mark_actions.append(act)
         for m in (self.edit_menu, self.footage_menu, self.sequence_menu,
-                  self.fade_menu, self.mark_menu):
+                  self.fade_menu, self.motion_menu, self.mark_menu):
             bar.insertMenu(self._anchor, m)
         self.sync_menus()
 
@@ -271,6 +281,16 @@ class Workspace(object):
         if tl is not None:
             import marks
             getattr(marks, name)(tl)
+
+    def _apply_motion(self, preset):
+        tl = self._front_timeline()
+        if tl is None:
+            return
+        from motion import apply_motion
+        try:
+            apply_motion(tl, preset)
+        except Exception as e:
+            self.pm.status_bar.showMessage("Motion failed: %s" % e, 6000)
 
     def _apply_fade(self, mode):
         tl = self._front_timeline()
@@ -316,6 +336,8 @@ class Workspace(object):
         tl = self._front_timeline()
         self.render_action.setEnabled(tl is not None)
         for act in self._fade_actions:
+            act.setEnabled(tl is not None)
+        for act in self._motion_actions:
             act.setEnabled(tl is not None)
         for act in self._mark_actions:
             act.setEnabled(tl is not None)

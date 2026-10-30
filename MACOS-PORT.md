@@ -131,6 +131,10 @@ None of these exist in the original.
 - Fades (in, out, in and out) and cross dissolves in one click
   (`fades.py`: Transitions menu and the clip right-click menu), with a Fade
   Length setting.
+- Motion presets (`motion.py`: Motion menu and the clip right-click menu):
+  slide in / out, pop, zoom, shake on video, image and text clips, with
+  easing baked into ordinary keyframes (so projects stay readable by the
+  original). Length and easing are settings (`motion_seconds`, `motion_ease`).
 - In and Out points (`marks.py`): I and O set them, Shift+I / Shift+O go to
   them, Option+X clears. They show on the ruler as halves of the playhead
   marker and can be dragged. The Render panel can render In to Out only

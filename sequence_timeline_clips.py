@@ -1594,6 +1594,12 @@ def _clip_context_menu(self, clip, pos):
             and self._track_type(self._clip_track_id(clip)) in ("video", "image", "audio")):
         from fades import add_fade_submenu
         fade_actions = add_fade_submenu(menu)
+    # Motion presets for video / image / text clips (motion.py)
+    motion_actions = {}
+    if (workspace.get() is not None
+            and self._track_type(self._clip_track_id(clip)) in ("video", "image", "text")):
+        from motion import add_motion_submenu
+        motion_actions = add_motion_submenu(menu)
     marker_menu = menu.addMenu("Marker")
     marker_click_action = marker_menu.addAction("Add To Mouse Click")
     marker_tick_action = marker_menu.addAction("Add to Time Tick")
@@ -1635,6 +1641,10 @@ def _clip_context_menu(self, clip, pos):
     if action is not None and action in fade_actions:
         from fades import apply_fade
         apply_fade(self, fade_actions[action])
+        return
+    if action is not None and action in motion_actions:
+        from motion import apply_motion
+        apply_motion(self, motion_actions[action])
         return
     if action == speed_action:
         from clip_speed import edit_clip_speed

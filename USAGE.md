@@ -83,6 +83,7 @@ The menu bar changes with what is in front. The menus you will use most:
 | Sequence | Add New Sequence |
 | Tracks | Add a video, audio, image, caption, keyframe or text track |
 | Transitions | Fades, Cross Dissolve, Fade Length |
+| Motion | Slide, Pop, Zoom and Shake presets, Motion Options |
 | Mark | In and Out points, and Render In to Out |
 | Preview | Refresh, Clear Video, Clear Audio |
 | Settings | Global Settings, Project Settings |
@@ -255,6 +256,26 @@ different tracks**, then choose **Cross Dissolve**. Over the overlap, the upper
 video clip fades in (if it starts later) or out (if it ends first). With two audio
 clips, the sound crossfades. If you don't meet those conditions, FLAVE says what
 to select.
+
+## 10a. Motion presets
+
+The **Motion** menu (and a clip's right-click > **Motion**) adds one-click
+animation to the selected video, image or text clips. Like the fades, each
+preset is built from ordinary keyframes on keyframe tracks above the clip, in a
+single undo step, so you can open and tweak the keys afterward.
+
+| Preset | What it does |
+|---|---|
+| Slide In (Left, Right, Top, Bottom) | The clip glides in from off screen to where it sits |
+| Slide Out (Left, Right, Top, Bottom) | The clip glides off screen at its end |
+| Pop In / Pop Out | Scales up with a slight overshoot (or shrinks away) while fading |
+| Zoom In / Zoom Out (whole clip) | A slow push in or pull out of about 15 percent |
+| Shake | A quick jitter that settles at the start of the clip |
+
+**Motion > Motion Options...** sets the length in seconds (default 0.75) and the
+easing (ease out, ease in, ease in and out, overshoot, or linear). Applying a
+second preset to the same clip adds to its keys. If two presets overlap, the
+newer one replaces the keys in the overlap.
 
 ## 11. Keyframes
 
