@@ -363,9 +363,12 @@ class Workspace(object):
         tl = self._front_timeline()
         if tl is None:
             return
-        from text_anim import add_title
+        from text_anim import add_title, ask_title_text
+        texts = ask_title_text(self.pm, kind)
+        if not texts:
+            return
         try:
-            add_title(tl, kind)
+            add_title(tl, kind, texts)
         except Exception as e:
             self.pm.status_bar.showMessage("Title failed: %s" % e, 6000)
 

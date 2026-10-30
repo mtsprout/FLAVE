@@ -337,11 +337,13 @@ The last style you used is the style of every new text clip.
 The **Text** menu has ready-made titles and reveals. They use normal text clips
 and keyframes, so you can restyle or edit anything afterward.
 
-- **Add Title:** a centered "Title" at the playhead that fades in and out
-  (4 seconds). Change the words and style like any text clip.
-- **Add Lower Third:** a "Name" and a smaller "Subtitle" at the lower left, which
-  slide in from the left and fade out at the end (5 seconds). Each goes on its
-  own text track, and new tracks are created on top when none is free.
+- **Add Title:** asks for the words, then adds them centered at the playhead,
+  fading in and out (4 seconds).
+- **Add Lower Third:** asks for **Line 1** and an optional **Line 2**. With one
+  line you get a single name at the lower left; with two, a larger first line
+  and a smaller second. The text slides in from the left and fades out at the end
+  (5 seconds). Each line goes on its own text track, and new tracks are created
+  on top when none is free. Restyle or edit them later like any text clip.
 - **Reveal Selected Text** (also a text clip's right-click > **Text Reveal**):
   - **Typewriter:** one letter at a time (several lines reveal line by line).
   - **Word by Word:** a word at a time, with a short pause after each.

@@ -16,7 +16,8 @@
 
 import sqlite3
 
-from PySide6.QtWidgets import QInputDialog
+from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QFormLayout, QInputDialog,
+                               QLineEdit)
 
 CPS_KEY = "text_reveal_cps"          # typing speed, characters per second
 DEFAULT_CPS = 16.0
@@ -211,6 +212,36 @@ def apply_reveal(tl, mode):
 
 # ---------------------------------------------------------------- titles
 
+def ask_title_text(parent, kind):
+    # The words for a title (one line) or a lower third (a name, and an
+    # optional second line). Returns [text] or [text, subtitle], or None when
+    # cancelled or empty.
+    if kind == "title":
+        text, ok = QInputDialog.getText(parent, "Add Title", "Title text:",
+                                        QLineEdit.Normal, "")
+        text = (text or "").strip()
+        return [text] if ok and text else None
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("Add Lower Third")
+    form = QFormLayout(dlg)
+    first = QLineEdit()
+    second = QLineEdit()
+    second.setPlaceholderText("optional second line")
+    form.addRow("Line 1:", first)
+    form.addRow("Line 2:", second)
+    box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+    box.accepted.connect(dlg.accept)
+    box.rejected.connect(dlg.reject)
+    form.addRow(box)
+    first.setFocus()
+    if dlg.exec() != QDialog.Accepted or not first.text().strip():
+        return None
+    out = [first.text().strip()]
+    if second.text().strip():
+        out.append(second.text().strip())
+    return out
+
+
 def _text_track_for(cur, sequence_id, start, end):
     # A text track with room for start..end-1, else a new one on top
     cur.execute("SELECT id FROM tracks WHERE sequence_id = ? AND track_type = "
@@ -248,9 +279,10 @@ def _select(tl, mem_ids):
         pass
 
 
-def add_title(tl, kind):
-    # kind "title" or "lower_third": the clips at the playhead, then their
-    # fades / slides. Returns the new clip ids.
+def add_title(tl, kind, texts):
+    # kind "title" or "lower_third": the clips at the playhead with these
+    # words (a lower third: one or two lines), then their fades / slides.
+    # Returns the new clip ids.
     seq_w, seq_h = tl._sequence_size()
     fps = float(tl.fps or 30)
     start = max(0, int(tl.current_frame))
@@ -264,22 +296,23 @@ def add_title(tl, kind):
         cur = conn.cursor()
         track = _text_track_for(cur, tl.sequence_id, start, start + length)
         if kind == "title":
-            ids = [_add_text(cur, tl, track, start, length, "Title",
+            ids = [_add_text(cur, tl, track, start, length, texts[0],
                              seq_h * 0.14, seq_w // 2, seq_h // 2, seq_w, seq_h)]
         else:
-            left = int(seq_w * 0.07)
             from text_clip import text_box_rect
-            name_size, sub_size = seq_h * 0.075, seq_h * 0.042
-            ny, sy = int(seq_h * 0.80), int(seq_h * 0.875)
-            # left aligned: the box is centered on x, so put its centre half
-            # a default-text width right of the margin
-            nw = text_box_rect("Name", None, name_size, 0, 0).width()
-            sw = text_box_rect("Subtitle", None, sub_size, 0, 0).width()
-            ids = [_add_text(cur, tl, track, start, length, "Name", name_size,
-                             left + nw // 2, ny, seq_w, seq_h)]
-            track2 = _text_track_for(cur, tl.sequence_id, start, start + length)
-            ids.append(_add_text(cur, tl, track2, start, length, "Subtitle",
-                                 sub_size, left + sw // 2, sy, seq_w, seq_h))
+            left = int(seq_w * 0.07)
+            two = len(texts) > 1
+            sizes = (seq_h * 0.075, seq_h * 0.042) if two else (seq_h * 0.06,)
+            ys = (int(seq_h * 0.80), int(seq_h * 0.875)) if two else (int(seq_h * 0.84),)
+            ids = []
+            for i, line in enumerate(texts[:2]):
+                # left aligned: a box is centered on x, so its centre sits
+                # half its own width right of the margin
+                w = text_box_rect(line, None, sizes[i], 0, 0).width()
+                tr = track if i == 0 else _text_track_for(
+                    cur, tl.sequence_id, start, start + length)
+                ids.append(_add_text(cur, tl, tr, start, length, line, sizes[i],
+                                     left + w // 2, ys[i], seq_w, seq_h))
         conn.commit()
     except Exception:
         conn.rollback()
