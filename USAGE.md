@@ -198,11 +198,14 @@ doesn't change what you render.
 
 - Click or drag in the **ruler** to move the playhead. Grab the handle at the top
   of the playhead to scrub.
-- **Zoom:** `+` and `-`, or use the navigator below (next item).
+- **Zoom:** `+` and `-`, or Alt+scroll. `+` and `-` keep the playhead where it is
+  on screen (or the middle of the view when the playhead is off screen). Alt+scroll
+  zooms around the mouse pointer.
 - **Zoom navigator:** the bar at the bottom shows the whole sequence, with a lit
-  window for the part you are looking at. Drag the window to scroll, drag either
-  end to zoom, click outside it to jump there, and double-click to fit the whole
-  sequence.
+  window for the part you are looking at. Drag either end of the window to zoom:
+  both ends move together, so the window shrinks toward its middle as you zoom in.
+  Drag the middle of the window to move along the timeline. Click outside the window
+  to jump there, and double-click to fit the whole sequence.
 - **Track height:** the slider at the bottom left of the timeline makes every
   track taller or shorter. This is display only, and it is remembered.
 - Vertical lines in the clip area mark timecode steps.

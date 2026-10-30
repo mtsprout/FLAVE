@@ -4,7 +4,10 @@
 # sequence as a bar with a lit window for the part the timeline shows. Drag
 # the window to scroll, drag its ends to zoom, double-click to fit all.
 # Everything goes through the timeline's own state (pixels_per_frame,
-# view_start_frame, _update_clips_width). ASCII only.
+# view_start_frame, _update_clips_width). Zooming keeps its anchor: dragging
+# either end of the window zooms around the middle of the window (both ends
+# move), and the zoom keys keep the playhead (or the middle of the view) where
+# it is on screen. ASCII only.
 
 from PySide6.QtCore import QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QPainter
@@ -48,6 +51,25 @@ def prime_track_scale():
     except ValueError:
         val = TRACK_SCALE_DEFAULT
     sql.TRACK_HEIGHT_SCALE[0] = max(TRACK_SCALE_MIN, min(TRACK_SCALE_MAX, val)) / 100.0
+
+
+def keep_anchor(tl, old_ppf):
+    # After a zoom step from old_ppf: scroll so the playhead (when it is on
+    # screen, else the middle of the view) stays at the same x. Unified
+    # window only; the original anchors at the left edge.
+    import workspace
+    if workspace.get() is None:
+        return
+    new_ppf = tl.pixels_per_frame
+    if not old_ppf or new_ppf == old_ppf:
+        return
+    from sequence_timeline_ruler import CLIPS_COL
+    width = max(1.0, float(tl.ruler.sectionSize(CLIPS_COL)))
+    start = float(tl.view_start_frame)
+    vis = width / old_ppf
+    cur = float(tl.current_frame)
+    anchor = cur if start <= cur <= start + vis else start + vis / 2.0
+    tl.view_start_frame = int(round(anchor - (anchor - start) * old_ppf / new_ppf))
 
 
 class ZoomNavigator(QWidget):
@@ -171,13 +193,13 @@ class ZoomNavigator(QWidget):
         min_vis = 5.0
         if self._mode == "pan":
             self._set_view(start0 + dx, vis0)
-        elif self._mode == "left":
-            right = start0 + vis0
-            new_start = max(0.0, min(right - min_vis, start0 + dx))
-            self._set_view(new_start, right - new_start)
-        elif self._mode == "right":
-            new_vis = max(min_vis, min(span - start0, vis0 + dx))
-            self._set_view(start0, new_vis)
+        elif self._mode in ("left", "right"):
+            # zoom around the middle of the window: the dragged end follows
+            # the mouse and the other end mirrors it
+            centre = start0 + vis0 / 2.0
+            new_vis = vis0 + 2.0 * dx if self._mode == "right" else vis0 - 2.0 * dx
+            new_vis = max(min_vis, min(span, new_vis))
+            self._set_view(max(0.0, centre - new_vis / 2.0), new_vis)
 
     def _set_view(self, start, vis):
         # show frames start .. start + vis (zoom from vis, scroll from start)
@@ -190,6 +212,7 @@ class ZoomNavigator(QWidget):
         tl._update_status()
         tl._save_view_state()
         self.update()
+        self.repaint()               # show the new window while the mouse is still down
 
 
 class TimelineScaleBar(QWidget):

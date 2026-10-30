@@ -1652,10 +1652,17 @@ class SequenceTimeline(QMainWindow):
 
     def zoom_in(self):
         if self.pixels_per_frame < ZOOM_MAX_PPF:
+            old_ppf = self.pixels_per_frame
             self.pixels_per_frame = clamp_zoom(self.pixels_per_frame * ZOOM_STEP)
+            self._keep_zoom_anchor(old_ppf)
             self._update_clips_width()
             self._update_status()
             self._save_view_state()
+
+    def _keep_zoom_anchor(self, old_ppf):
+        # unified window: the playhead stays put while zooming (timeline_scale.py)
+        import timeline_scale
+        timeline_scale.keep_anchor(self, old_ppf)
 
     def _zoom_by(self, factor):
         # Multiply the zoom by factor, within ZOOM_MIN_PPF..ZOOM_MAX_PPF
@@ -1668,7 +1675,9 @@ class SequenceTimeline(QMainWindow):
 
     def zoom_out(self):
         if self.pixels_per_frame > ZOOM_MIN_PPF:
+            old_ppf = self.pixels_per_frame
             self.pixels_per_frame = clamp_zoom(self.pixels_per_frame / ZOOM_STEP)
+            self._keep_zoom_anchor(old_ppf)
             self._update_clips_width()
             self._update_status()
             self._save_view_state()
