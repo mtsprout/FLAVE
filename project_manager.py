@@ -463,6 +463,9 @@ class ProjectManager(QMainWindow):
             QMessageBox.warning(self, "Settings", "global_settings.py not found")
             return
         self.settings_window = GlobalSettingsWindow(self)
+        if self.workspace is not None:
+            self._show_as_dialog(self.settings_window)
+            return
         # Under the menu bar on first open / monitor change
         place_from_project_manager(self.settings_window, self, "global_settings")
         self.settings_window.show()
@@ -474,9 +477,27 @@ class ProjectManager(QMainWindow):
         if not self.current_project:
             return
         self.project_settings_window = ProjectSettingsWindow(self)
+        if self.workspace is not None:
+            self._show_as_dialog(self.project_settings_window)
+            return
         place_from_project_manager(self.project_settings_window, self,
                                    "project_settings")
         self.project_settings_window.show()
+
+    def _show_as_dialog(self, win):
+        # Unified window: a settings window is a dialog over the main window
+        # (modal, centred on it, same macOS space even when the app is full
+        # screen), not a separate top-level window
+        win.setWindowFlags(Qt.Dialog)
+        win.setWindowModality(Qt.ApplicationModal)
+        win.adjustSize()
+        win.resize(max(win.width(), 480), win.height())
+        geo = self.frameGeometry()
+        win.move(geo.center().x() - win.width() // 2,
+                 geo.center().y() - win.height() // 2)
+        win.show()
+        win.raise_()
+        win.activateWindow()
 
     def _open_sequence_manager(self):
         if SequenceManager is None:
