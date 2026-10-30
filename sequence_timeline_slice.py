@@ -123,6 +123,22 @@ def slice_hover(tl, pos):
     _set_lines(tl, rects)
 
 
+def _notify(tl):
+    # tool bar buttons follow the mode (timeline_tools.py)
+    for fn in list(getattr(tl, "_tool_listeners", None) or []):
+        try:
+            fn()
+        except Exception:
+            pass
+
+
+def _stays_on():
+    # unified window: the razor stays on for repeated cuts (C / V / Esc /
+    # right-click / the Select button leave it); the original leaves after one
+    import workspace
+    return workspace.get() is not None
+
+
 def slice_click(tl, pos):
     # Left-click: the existing slice path at this x, then back to regular
     # mode (; the button release of this click is still swallowed
@@ -136,6 +152,9 @@ def slice_click(tl, pos):
     if slice_split_frame(clip, x, tl.view_start_frame, tl.pixels_per_frame) is None:
         return False
     tl.slice_clip(clip, x)
+    if _stays_on():
+        slice_hover(tl, pos)            # the line for the next cut
+        return True
     exit_slice_mode(tl)
     tl._slice_eat_release = True
     return True
@@ -177,6 +196,9 @@ def enter_slice_mode(tl):
     # Clear a clip-edge resize pointer left by the normal hover so the
     # arrow shows; slice mode then sets no cursor of its own
     tl.table.viewport().unsetCursor()
+    if _stays_on():
+        tl.table.viewport().setCursor(Qt.CrossCursor)
+    _notify(tl)
     return True
 
 
@@ -185,6 +207,9 @@ def exit_slice_mode(tl):
         return False
     tl._slice_mode = False
     _set_lines(tl, [])
+    if _stays_on():
+        tl.table.viewport().unsetCursor()
+    _notify(tl)
     return True
 
 

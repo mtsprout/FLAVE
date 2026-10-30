@@ -690,6 +690,12 @@ class Workspace(object):
         marks.LISTENERS.setdefault(sid, []).append(lambda t=win: marks.sync(t))
         # under the tracks: track height slider and the zoom navigator
         win.centralWidget().layout().addWidget(TimelineScaleBar(win))
+        # above them: the tool bar (Select, Razor), and sliding a track by its
+        # name reorders the tracks
+        from timeline_tools import ToolBar
+        win.centralWidget().layout().insertWidget(0, ToolBar(win))
+        import track_drag
+        track_drag.install(win)
         st._open_windows[sid] = win
         from sequence_timeline_sql import _load_sequence_name
         name = _load_sequence_name(sid) or "Sequence %d" % sid

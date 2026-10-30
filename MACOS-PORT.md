@@ -160,6 +160,10 @@ None of these exist in the original.
   overridden per project (`GridSnap` in the project's `settings` table; Project
   Settings, Edit > Snap to Grid, the S key). Extra rows in `settings` are ignored
   by the original.
+- Timeline tool bar (`timeline_tools.py`): Select (V) and Razor (C) buttons above
+  the tracks, built to take more tools. In this UI the razor stays on after a cut
+  (the original leaves slice mode after one). Grab a track name and slide it to
+  reorder tracks (`track_drag.py`).
 - Motion presets (`motion.py`: Motion menu and the clip right-click menu):
   slide in / out, pop, zoom, shake on video, image and text clips, with
   easing baked into ordinary keyframes (so projects stay readable by the

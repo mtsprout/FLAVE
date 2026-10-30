@@ -241,7 +241,7 @@ space) or by clicking several.
 |---|---|
 | Move a clip | Drag it. It snaps to neighboring clip edges and the playhead. |
 | Trim a clip | Drag its left or right edge. |
-| Slice | Press `C` to enter slice mode, click where to cut, press `V` (or Escape, or right-click) to leave. Or right-click a clip > Slice. |
+| Cut (razor) | Click the **Razor** button in the tool bar above the tracks, or press `C`, then click a clip where you want to cut. The razor stays on, so you can keep cutting. Click **Select**, or press `V` or Escape (or right-click), to go back. Linked audio is cut too. Or right-click a clip > Slice. |
 | Copy / Cut | `Ctrl+C` / `Ctrl+X` |
 | Paste | `Ctrl+V` pastes at the playhead ("Paste To Tic"). Edit > **Paste to End**, **Paste w/New Tracks** and **Paste Insert w/New Tracks** are also there. |
 | Delete | Delete key, or right-click > Delete. Leaves a gap. |
@@ -271,7 +271,10 @@ Right-click a track's header for:
 - Track Display Properties
 - Duplicate Track(s) > Above or Below
 
-Tracks higher in the list are drawn on top of tracks below them.
+**Reorder tracks** by grabbing a track's name and sliding it up or down. A blue line shows
+where it will land. Let go to drop it (one undo step). Move > Up / Down / To Top / To
+Bottom in the right-click menu do the same. Tracks higher in the list are drawn on top of
+tracks below them.
 
 ## 10. Fades and cross dissolves
 
@@ -516,7 +519,7 @@ On a Mac, read `Ctrl` as **Command**.
 | I / O | Set In / Out |
 | Shift+I / Shift+O | Go to In / Out |
 | Alt+X | Clear In and Out |
-| C / V | Enter / leave slice mode |
+| C / V | Razor tool / Select tool |
 | Delete | Delete the selected clip |
 | Ctrl+C / Ctrl+X / Ctrl+V | Copy / Cut / Paste at the playhead |
 | Ctrl+Z / Ctrl+Y | Undo / Redo |
