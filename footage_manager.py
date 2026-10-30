@@ -651,7 +651,8 @@ class FootageManager(QMainWindow):
             self._rename_footage(it.data(Qt.UserRole))
 
     def _replace_footage(self, footage_id):
-        QMessageBox.information(self, "Replace", f"Replace stub for id {footage_id}")
+        from relink import replace_footage
+        replace_footage(self, footage_id)
 
     def _remove_footage(self, footage_id):
         # The only removal path (row context menu Remove; no menu

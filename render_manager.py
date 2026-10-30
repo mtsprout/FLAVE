@@ -122,7 +122,8 @@ def _output_sequence_stem(sequence_id, sequence_name):
 
 
 def next_output_path(project_db, sequence_id, sequence_name=""):
-    # Default render output, in the project file's folder:
+    # Default render output, in PROJECT_HOME/render (CPU backend; the project
+    # file's folder otherwise):
     # {ProjectName}_{SequenceName}_vNN.mp4. NN is at least two digits, one
     # higher than the highest vNN already in that folder for this project
     # and sequence name (case-insensitive; a missing number is not reused,
@@ -133,7 +134,8 @@ def next_output_path(project_db, sequence_id, sequence_name=""):
         return "%s_v01.mp4" % _sanitize(sequence_name)
     import re
     from sequence_preview import project_name
-    folder = os.path.dirname(os.path.abspath(project_db))
+    import project_dirs
+    folder = project_dirs.render_dir(project_db)        # PROJECT_HOME/render
     stem = _output_sequence_stem(sequence_id, sequence_name)
     base = "%s_%s" % (project_name(project_db), stem)
     pat = re.compile(r"^%s_v(\d+)\.mp4$" % re.escape(base), re.IGNORECASE)
@@ -156,8 +158,16 @@ def resolve_output_path(text, project_db):
         return ""
     if os.path.isabs(p):
         return os.path.normpath(p)
-    base = os.path.dirname(os.path.abspath(project_db)) if project_db else os.getcwd()
+    import project_dirs
+    base = project_dirs.render_dir(project_db) if project_db else os.getcwd()
     return os.path.normpath(os.path.join(base, p))
+
+
+def _ensured(out_path, project_db):
+    # creates PROJECT_HOME/render when the output goes there (project_dirs.py)
+    import project_dirs
+    project_dirs.ensure_output_dir(out_path, project_db)
+    return out_path
 
 
 def mbps_text(v):
@@ -919,7 +929,7 @@ def _make_window_class():
             self.out_edit = QLineEdit(
                 next_output_path(project_db, self.sequence_id, self.seq_name))
             self.out_edit.setToolTip("A bare name or relative path is saved in the "
-                                     "project folder; an absolute path is used as is.")
+                                     "project's render folder; an absolute path is used as is.")
             form.addRow("Output", self.out_edit)
             self.codec_combo = QComboBox()
             for name, _nv, _cpu in CODECS:
@@ -1202,7 +1212,7 @@ def _make_window_class():
                     chunk = 8
                 params = {
                     "project_db": project_db, "sequence_id": self.sequence_id,
-                    "out_path": resolve_output_path(self.out_edit.text(), project_db),
+                    "out_path": _ensured(resolve_output_path(self.out_edit.text(), project_db), project_db),
                     "width": getattr(player, "out_w", player.seq_w),
                     "height": getattr(player, "out_h", player.seq_h), "fps": tl.fps,
                     "total_frames": total, "start_frame": start,

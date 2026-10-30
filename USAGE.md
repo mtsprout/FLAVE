@@ -94,7 +94,17 @@ The menu bar changes with what is in front. The menus you will use most:
 A project is a single `.db` file that holds your footage list, sequences, clips,
 keyframes and settings. Your media files stay where they are on disk.
 
-- **New Project:** File > New Project. Choose a folder, then type a name.
+Each new project gets **its own folder**, the project home:
+
+```
+My Film/              <- created for you inside the folder you pick
+  My Film.db          <- the project (its undo and cache files sit beside it)
+  render/             <- every render goes here by default
+```
+
+- **New Project:** File > New Project. Choose the folder to create it in, then
+  type a name. FLAVE creates `<that folder>/<name>/` with the project and a
+  `render` folder inside.
 - **Open Project:** File > Open Project, and pick a project file.
 - **Close Project:** File > Close Project.
 
@@ -121,8 +131,10 @@ In the Footage list:
   Right-click the header to show them.
 - **Slug:** Footage > Slug makes a solid color bar or color fill you can use as a
   background or a title card base.
-- **Replace** and **Remove** are in the row's right-click menu. Replace is not
-  implemented in this version. Don't rely on it to relink missing media.
+- **Replace** (right-click) points a footage item at a different file and keeps
+  its clips. Use it when media moved or a project came from another computer.
+  After you pick the file, FLAVE offers to relink the other missing files that
+  sit in the same place. **Remove** takes the item out of the project.
 
 ## 5. Sequences
 
@@ -373,7 +385,7 @@ transport bar shows the marked span. The marks are saved with the sequence.
 
 | Option | What it does |
 |---|---|
-| Output | The file to write |
+| Output | The file to write. It defaults to the project's `render` folder (`<project home>/render/<project>_<sequence>_v01.mp4`, counting up); a bare name also lands there. |
 | Codec | H.264 or H.265 |
 | Output Size | The sequence size, or 1080p, 1440p or 4K UHD. Bitrate follows the size until you change it yourself. |
 | Range | **Entire sequence**, or **In to Out** (only when marks are set) |
@@ -440,8 +452,9 @@ On a Mac, read `Ctrl` as **Command**.
 
 **Clips show as missing, or nothing plays after moving a project between
 computers.** Projects store the full path to each media file. Paths from a
-Windows machine, such as `P:/footage/a.mov`, don't exist on a Mac. Replace is not
-implemented, so re-import the files. See MACOS-PORT.md.
+Windows machine, such as `P:/footage/a.mov`, don't exist on a Mac. Right-click the
+footage > **Replace**, pick the file in its new place, and accept the offer to
+relink the rest. See MACOS-PORT.md.
 
 **Playback is choppy or the preview is blank.** Wait for the preview status line
 to finish, or press F5. Lower Project Settings > Preview Size. Close other

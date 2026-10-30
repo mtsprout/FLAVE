@@ -327,10 +327,15 @@ class ProjectManager(QMainWindow):
         if new_project is None:
             QMessageBox.warning(self, title, "new_project.py not found")
             return
+        import project_dirs
         start_dir = (os.path.dirname(self.current_project) if self.current_project
                      else _get_global_setting("last_project_folder", ""))
-        folder = QFileDialog.getExistingDirectory(self, title + ": choose a folder",
-                                                  start_dir or "")
+        if start_dir and project_dirs.enabled() and self.current_project:
+            start_dir = os.path.dirname(start_dir)      # beside the open project's folder
+        folder = QFileDialog.getExistingDirectory(
+            self, title + (": choose where to create the project folder"
+                           if project_dirs.enabled() else ": choose a folder"),
+            start_dir or "")
         if not folder:
             return
         name = ""
@@ -342,7 +347,8 @@ class ProjectManager(QMainWindow):
             name = (name or "").strip()
             err = new_project.project_name_error(name)
             if not err:
-                db_path = new_project.project_path_for(folder, name)
+                import project_dirs
+                home, db_path = project_dirs.new_project_paths(folder, name)
                 if os.path.exists(db_path):
                     err = "That file already exists:\n%s" % db_path
             if not err:
@@ -351,11 +357,17 @@ class ProjectManager(QMainWindow):
         if self.current_project:
             self._close_project()
         try:
+            if project_dirs.enabled():
+                project_dirs.make_home(home)        # <folder>/<Name>/ + render/
             new_project.create_project_db(db_path)
         except Exception as e:
             QMessageBox.critical(self, title, f"Could not create project:\n{e}")
             return
         self._on_project_created(db_path)
+        if project_dirs.enabled():
+            # the next New Project starts in the folder chosen here, not
+            # inside this project's own folder
+            _set_global_setting("last_project_folder", folder)
 
     def _on_project_created(self, db_path):
         self.current_project = db_path

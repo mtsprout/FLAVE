@@ -84,8 +84,8 @@ way that matters).
    the CPU backend. The render chunk size still uses `previewGpuBatchFrames`.
 6. **Captions run on the CPU only** (faster-whisper, int8). There is no CUDA
    cuBLAS / cuDNN setup. Generating captions is much slower than on a GPU.
-7. **Replace footage is still a stub** in both versions ("Replace stub for
-   id N"). On a Mac this matters more, see the first gotcha below.
+7. **Replace footage works here** (`relink.py`); in the original it is a stub.
+   It is the fix for the first gotcha below.
 8. **Not bit-exact with the GPU.** The compositor follows the PTX kernel's
    rules (nearest-pixel sampling, crop, rotate, chroma, colour, outline) but
    rounding can differ in single pixels. A render from the Mac version is not
@@ -131,6 +131,15 @@ None of these exist in the original.
 - Fades (in, out, in and out) and cross dissolves in one click
   (`fades.py`: Transitions menu and the clip right-click menu), with a Fade
   Length setting.
+- One folder per new project (`project_dirs.py`): File > New Project makes
+  `<chosen folder>/<Name>/` holding `<Name>.db` (with its undo, audio cache and
+  preview files) and a `render/` folder. Every render defaults to
+  `PROJECT_HOME/render/<Name>_<Sequence>_vNN.mp4`; a relative Output path also
+  lands there. Existing projects keep their folder as PROJECT_HOME and get
+  `render/` the first time they render. Media is referenced, not copied.
+  (Windows / CUDA path: unchanged.)
+- Replace footage (`relink.py`): relinks a footage item to another file,
+  keeping its clips, and offers the other missing files in the same place.
 - Motion presets (`motion.py`: Motion menu and the clip right-click menu):
   slide in / out, pop, zoom, shake on video, image and text clips, with
   easing baked into ordinary keyframes (so projects stay readable by the
@@ -151,9 +160,9 @@ None of these exist in the original.
 
 1. **Windows paths do not resolve.** Project files store the full path of
    every media file. A project made on Windows (`P:/Flave/clip.mp4`) opens on
-   a Mac with every clip offline. There is no relink: Replace is a stub.
-   Until that exists, keep media at the same paths, or edit
-   `footage.original_path` in the project database.
+   a Mac with every clip offline. Fix it with right-click > Replace in the
+   Footage panel: pick the new file, and FLAVE offers to relink the other
+   missing files that sit in the same place relative to it.
 2. **ffmpeg and ffprobe must be installed** (`brew install ffmpeg`). The app
    adds `/opt/homebrew/bin` and `/usr/local/bin` to its PATH, so Finder
    launches find them, but it does not bundle them.
